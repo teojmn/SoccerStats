@@ -49,6 +49,20 @@ def identify_common_columns(dataframes):
     print(f"\nColonnes communes identifiées: {sorted(common_cols)}")
     return common_cols
 
+def remove_goalkeepers(df):
+    """
+    Supprime les gardiens de but du dataframe
+    """
+    initial_count = len(df)
+    df_filtered = df[df['Pos'] != 'GK'].copy()
+    removed_count = initial_count - len(df_filtered)
+    
+    print(f"\nSuppression des gardiens de but...")
+    print(f"  Joueurs supprimés: {removed_count}")
+    print(f"  Joueurs restants: {len(df_filtered)}")
+    
+    return df_filtered
+
 def assemble_data(dataframes):
     """
     Assemble tous les dataframes en utilisant Player, Born et Squad comme clés
@@ -121,7 +135,6 @@ def assemble_data(dataframes):
             print(f"  ATTENTION: Le nombre de lignes a changé de façon inattendue!")
             print(f"      Lignes attendues: {len(main_keys)}, Lignes obtenues: {assembled_df.shape[0]}")
 
-
     return assembled_df
 
 def save_assembled_data(assembled_df, output_filename="assembled_data.csv"):
@@ -151,6 +164,9 @@ def main():
         common_cols = identify_common_columns(dataframes)
         
         assembled_df = assemble_data(dataframes)
+        
+        # Supprimer les gardiens de but
+        assembled_df = remove_goalkeepers(assembled_df)
         
         save_assembled_data(assembled_df)
 
