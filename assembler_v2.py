@@ -89,7 +89,6 @@ FORWARD_COLS = COMMON_COLS + [
 ]
 
 def load_csv_files(data_dir=".", files=None, verbose=True):
-    """Charge tous les fichiers CSV nécessaires"""
     if files is None:
         files = [
             "players_cleaned.csv",
@@ -121,7 +120,6 @@ def load_csv_files(data_dir=".", files=None, verbose=True):
     return dataframes
 
 def remove_goalkeepers(df, pos_col='Pos', verbose=True):
-    """Supprime les gardiens de but du dataframe"""
     if pos_col not in df.columns:
         if verbose: 
             print(f"Colonne {pos_col} absente, pas de suppression GK.")
@@ -180,7 +178,6 @@ def assemble_data(dataframes, keys=DEFAULT_KEYS, meta_cols=META_COLS, verbose=Tr
     return main
 
 def extract_main_position(df, pos_col='Pos', verbose=True):
-    """Extrait le poste principal (premier mentionné) de chaque joueur"""
     df['MainPos'] = df[pos_col].str.split(',').str[0].str.strip()
     
     if verbose:
@@ -190,10 +187,6 @@ def extract_main_position(df, pos_col='Pos', verbose=True):
     return df
 
 def aggregate_transfers(df, verbose=True):
-    """
-    Pour chaque joueur transféré, conserve la ligne du club d'arrivée,
-    additionne les colonnes cumulatives et fait la moyenne des colonnes moyennes.
-    """
     sum_cols = [
         'MP', 'Starts', 'Min', 'Gls', 'Ast', 'G+A', 'G-PK', 'PK', 'PKatt', 'CrdY', 'CrdR', 'Matches'
     ]
@@ -220,7 +213,6 @@ def aggregate_transfers(df, verbose=True):
     return merged
 
 def filter_relevant_columns(df, position, verbose=True):
-    """Filtre les colonnes pertinentes selon le poste"""
     if position == 'DF':
         relevant_cols = DEFENDER_COLS
         position_name = "Défenseurs"
@@ -247,7 +239,6 @@ def filter_relevant_columns(df, position, verbose=True):
     return df_filtered
 
 def split_by_position(df, verbose=True):
-    """Sépare le dataframe en 3 selon le poste principal"""
     df_DF = df[df['MainPos'] == 'DF'].copy()
     df_MF = df[df['MainPos'] == 'MF'].copy()
     df_FW = df[df['MainPos'] == 'FW'].copy()
