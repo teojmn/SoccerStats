@@ -136,7 +136,7 @@ def remove_goalkeepers(df, pos_col='Pos', verbose=True):
 def assemble_data(dataframes, keys=DEFAULT_KEYS, meta_cols=META_COLS, verbose=True):
     """Assemble tous les dataframes en un seul"""
     if not dataframes:
-        raise ValueError("❌ Aucun fichier CSV n'a été chargé. Vérifiez le chemin des fichiers.")
+        raise ValueError("Vérifier chemin des fichiers.")
     
     main_name = "players_cleaned.csv"
     
