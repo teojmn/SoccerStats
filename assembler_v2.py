@@ -1,6 +1,7 @@
 import pandas as pd
 from pathlib import Path
 import sys
+import numpy as np
 
 DEFAULT_KEYS = ['Player', 'Born', 'Squad']
 META_COLS = ['Rk', 'Player', 'Nation', 'Pos', 'Squad', 'Comp', 'Age', 'Born', 'Matches']
@@ -127,7 +128,6 @@ def remove_goalkeepers(df, pos_col='Pos', verbose=True):
         return df
     
     initial = len(df)
-    # Supprime les lignes où Pos commence par 'GK'
     df = df[~df[pos_col].str.startswith('GK', na=False)].copy()
     
     if verbose:
@@ -164,11 +164,9 @@ def assemble_data(dataframes, keys=DEFAULT_KEYS, meta_cols=META_COLS, verbose=Tr
         if verbose and before != len(df):
             print(f"  {fname}: {before-len(df)} doublons supprimés")
         
-        # Colonnes à merger (exclure les métadonnées)
         add_cols = [c for c in df.columns if c not in meta_cols]
         merge_cols = keys + add_cols
         
-        # Merge
         main = main.merge(
             df[merge_cols], 
             on=keys, 
@@ -190,6 +188,36 @@ def extract_main_position(df, pos_col='Pos', verbose=True):
         print(df['MainPos'].value_counts())
     
     return df
+
+def aggregate_transfers(df, verbose=True):
+    """
+    Pour chaque joueur transféré, conserve la ligne du club d'arrivée,
+    additionne les colonnes cumulatives et fait la moyenne des colonnes moyennes.
+    """
+    sum_cols = [
+        'MP', 'Starts', 'Min', 'Gls', 'Ast', 'G+A', 'G-PK', 'PK', 'PKatt', 'CrdY', 'CrdR', 'Matches'
+    ]
+    mean_cols = [
+        'Min%', 'PPM', '+/-90', 'Sh/90', 'SoT/90', 'Cmp%', 'Won%', 'Succ%', 'Tkld%', 'SoT%', 'G/Sh', 'G/SoT'
+    ]
+
+    id_cols = ['Player', 'Born', 'Age']
+
+    df = df.sort_values(by=['Player', 'Born', 'Age', 'Squad', 'Comp'])
+    last_rows = df.groupby(id_cols, as_index=False).last()
+    sum_df = df.groupby(id_cols)[[col for col in sum_cols if col in df.columns]].sum(min_count=1).reset_index()
+    mean_df = df.groupby(id_cols)[[col for col in mean_cols if col in df.columns]].mean().reset_index()
+
+    merged = last_rows.drop(columns=[col for col in sum_cols + mean_cols if col in last_rows.columns], errors='ignore') \
+        .merge(sum_df, on=id_cols, how='left') \
+        .merge(mean_df, on=id_cols, how='left')
+
+    if verbose:
+        n_avant = len(df)
+        n_apres = len(merged)
+        print(f"\n[Transferts] Joueurs avant fusion : {n_avant}, après fusion : {n_apres}")
+
+    return merged
 
 def filter_relevant_columns(df, position, verbose=True):
     """Filtre les colonnes pertinentes selon le poste"""
@@ -231,7 +259,6 @@ def split_by_position(df, verbose=True):
         print(f"  Attaquants (FW) : {len(df_FW)} joueurs")
         print(f"  TOTAL           : {len(df_DF) + len(df_MF) + len(df_FW)} joueurs")
         
-        # Vérifier s'il y a des joueurs non classés
         total_classified = len(df_DF) + len(df_MF) + len(df_FW)
         if total_classified < len(df):
             unclassified = len(df) - total_classified
@@ -292,18 +319,22 @@ def main():
     print("\n[3/6] Suppression des gardiens...")
     assembled = remove_goalkeepers(assembled)
     
-    print("\n[4/6] Extraction du poste principal...")
+    print("\n[4/6] Gestion des transferts (fusion des lignes multi-clubs)...")
+    assembled = aggregate_transfers(assembled)
+    
+    print("\n[5/6] Extraction du poste principal...")
     assembled = extract_main_position(assembled)
     
     df_DF, df_MF, df_FW = split_by_position(assembled)
     
-    print("\n[5/6] Filtrage des colonnes pertinentes par poste...")
+    print("\n[6/6] Filtrage des colonnes pertinentes par poste...")
     df_DF = filter_relevant_columns(df_DF, 'DF', verbose=True)
     df_MF = filter_relevant_columns(df_MF, 'MF', verbose=True)
     df_FW = filter_relevant_columns(df_FW, 'FW', verbose=True)
     
-    print("\n[6/6] Sauvegarde des fichiers...")
-    save_position_files(df_DF, df_MF, df_FW, output_dir=data_dir)
+    print("\n[Sauvegarde] Création du dossier ./ressources/cleaned_data si besoin...")
+    Path("./ressources/cleaned_data").mkdir(parents=True, exist_ok=True)
+    save_position_files(df_DF, df_MF, df_FW, output_dir="./ressources/cleaned_data")
     
     print("\n" + "=" * 60)
     print("ASSEMBLAGE TERMINÉ AVEC SUCCÈS")
