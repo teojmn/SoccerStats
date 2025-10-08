@@ -3,6 +3,7 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 import numpy as np
+import os
 from data.loader import (
     load_and_prepare_data, 
     calculate_percentiles, 
@@ -309,6 +310,55 @@ def show_overview(data):
                 title="Joueurs par nationalité"
             )
             st.plotly_chart(fig_countries, use_container_width=True)
+    
+    # Récupérer tous les postes disponibles
+    positions = sorted(data['Position'].unique())
+    
+    # Créer autant de colonnes que de postes (max 4 par ligne)
+    positions_per_row = 4
+    
+    for i in range(0, len(positions), positions_per_row):
+        cols = st.columns(min(positions_per_row, len(positions) - i))
+        
+        for j, col in enumerate(cols):
+            if i + j < len(positions):
+                pos = positions[i + j]
+                
+                with col:
+                    
+                    pos_label = {
+                        'FW': 'Attaquants',
+                        'MF': 'Milieux',
+                        'DF': 'Défenseurs',
+                        'GK': 'Gardiens'
+                    }
+
+                    st.markdown(f"Top 5 {pos_label.get(pos, pos)}")
+
+                    # Filtrer par poste
+                    pos_data = data[data['Position'] == pos]
+                    
+                    # Choisir la métrique principale selon le poste
+                    position_metrics = get_position_metrics()
+                    
+                    if pos in position_metrics and position_metrics[pos]['primary']:
+                        main_metric = position_metrics[pos]['primary'][0]
+                        
+                        if main_metric in pos_data.columns:
+                            top_players = pos_data.nlargest(5, main_metric)[['Player', 'Squad', main_metric]]
+                            top_players[main_metric] = top_players[main_metric].round(2)
+                            
+                            # Renommer la colonne métrique pour plus de clarté
+                            metric_labels = get_metric_labels()
+                            top_players = top_players.rename(columns={
+                                main_metric: metric_labels.get(main_metric, main_metric)
+                            })
+                            
+                            st.dataframe(top_players, hide_index=True, use_container_width=True, height=220)
+                        else:
+                            st.info(f"Métrique {main_metric} non disponible")
+                    else:
+                        st.info("Pas de métrique définie pour ce poste")
 
 
 def show_by_position(data):
@@ -321,7 +371,28 @@ def show_by_position(data):
     
     pos_data = data[data['Position'] == selected_position]
     position_metrics = get_position_metrics()
-    metric_labels = get_metric_labels()
+    # Labels spécifiques pour l'onglet "Analyse par poste"
+    # (définis ici pour garder le contrôle du texte affiché dans ce tab)
+    metric_labels = {
+        'Gls_per_90': 'Buts par match',
+        'SoT_per_90': 'Tirs cadrés / 90',
+        'xG_per_90': 'Buts attendus / 90',
+        'Ast_per_90': 'Passes D / 90',
+        'xAG_per_90': 'Passes D attendues / 90',
+        'KP_per_90': 'Passes clés / 90',
+        'PrgP_per_90': 'Passes progressives / 90',
+        'PrgC_per_90': 'Courses progressives / 90',
+        'Touches_per_90': 'Touches / 90',
+        'TklW_per_90': 'Tacles réussis / 90',
+        'Int_per_90': 'Interceptions / 90',
+        'Recov_per_90': 'Récupérations / 90',
+        'Clr_per_90': 'Dégagements / 90',
+        'Won_per_90': 'Duels gagnés / 90',
+        'Saves_per_90': 'Arrêts / 90',
+        'GA_per_90': 'Buts encaissés / 90',
+        'Save%_per_90': '% Arrêts',
+        # ajoute d'autres mappings ici si nécessaire
+    }
     
     if selected_position in position_metrics:
         metrics = position_metrics[selected_position]
@@ -336,12 +407,22 @@ def show_by_position(data):
             col1, col2 = st.columns(2)
             
             with col1:
-                x_metric = st.selectbox("Métrique X", available_primary, key=f"{selected_position}_x")
+                # afficher des libellés lisibles mais retourner la colonne réelle
+                x_metric = st.selectbox(
+                    "Métrique X",
+                    options=available_primary,
+                    format_func=lambda k: metric_labels.get(k, k),
+                    key=f"{selected_position}_x"
+                )
             
             with col2:
-                y_metric = st.selectbox("Métrique Y", available_primary, 
-                                      index=1 if len(available_primary) > 1 else 0, 
-                                      key=f"{selected_position}_y")
+                y_metric = st.selectbox(
+                    "Métrique Y",
+                    options=available_primary,
+                    index=1 if len(available_primary) > 1 else 0,
+                    format_func=lambda k: metric_labels.get(k, k),
+                    key=f"{selected_position}_y"
+                )
             
             if x_metric != y_metric:
                 fig = create_scatter_plot(
@@ -357,6 +438,8 @@ def show_by_position(data):
             main_metric = available_primary[0]
             top_players = pos_data.nlargest(10, main_metric)[['Player', 'Squad', 'League', main_metric]]
             top_players[main_metric] = top_players[main_metric].round(2)
+            # Renommer la colonne principale par son libellé lisible
+            top_players = top_players.rename(columns={ main_metric: metric_labels.get(main_metric, main_metric) })
             st.dataframe(top_players, use_container_width=True)
 
 def show_player_comparison(data):
@@ -595,6 +678,201 @@ def show_methodology():
     permettant de situer un joueur par rapport à ses pairs (0-100%).
     """)
 
+# Ajout de la fonction pour charger les KPI
+@st.cache_data
+def load_kpi_data():
+    """Charge les données KPI depuis les fichiers CSV."""
+    kpi_data = {}
+    base_path = os.path.join(os.path.dirname(__file__), '..', 'ressources', 'KPI')
+    
+    kpi_files = {
+        'FW': 'kpi_fw.csv',
+        'DF': 'kpi_df.csv',
+    }
+    
+    for position, filename in kpi_files.items():
+        filepath = os.path.join(base_path, filename)
+        if os.path.exists(filepath):
+            try:
+                df = pd.read_csv(filepath)
+                kpi_data[position] = df
+            except Exception as e:
+                st.warning(f"Erreur lors du chargement de {filename}: {e}")
+    
+    return kpi_data
+
+def show_kpi_analysis(data):
+    """Analyse des KPI par poste."""
+    st.header("📊 Analyse des KPI")
+    
+    # Charger les données KPI
+    kpi_data = load_kpi_data()
+    
+    if not kpi_data:
+        st.warning("Aucune donnée KPI disponible.")
+        return
+    
+    # Sélection du poste
+    available_positions = list(kpi_data.keys())
+    selected_position = st.selectbox("Choisir un poste pour l'analyse KPI", available_positions)
+    
+    if selected_position not in kpi_data:
+        st.error(f"Données KPI non disponibles pour {selected_position}")
+        return
+    
+    kpi_df = kpi_data[selected_position]
+    
+    # Vue d'ensemble des KPI
+    st.subheader(f"Vue d'ensemble - {selected_position}")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.metric("Nombre de joueurs", len(kpi_df))
+        st.metric("Équipes représentées", kpi_df['Squad'].nunique() if 'Squad' in kpi_df.columns else "N/A")
+    
+    with col2:
+        if 'Age' in kpi_df.columns:
+            st.metric("Âge moyen", f"{kpi_df['Age'].mean():.1f} ans")
+        if 'Min' in kpi_df.columns:
+            st.metric("Minutes moyennes", f"{kpi_df['Min'].mean():.0f}")
+    
+    # Sélection des métriques KPI à analyser
+    st.subheader("Analyse des métriques clés")
+    
+    # Obtenir les colonnes numériques (KPI)
+    numeric_cols = kpi_df.select_dtypes(include=[np.number]).columns.tolist()
+    # Exclure les colonnes d'info de base
+    exclude_cols = ['Age', 'Min', '90s']
+    kpi_metrics = [col for col in numeric_cols if col not in exclude_cols]
+    
+    if len(kpi_metrics) >= 2:
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            x_metric = st.selectbox("Métrique X", kpi_metrics, key="kpi_x")
+        
+        with col2:
+            y_metric = st.selectbox("Métrique Y", kpi_metrics, 
+                                  index=1 if len(kpi_metrics) > 1 else 0, key="kpi_y")
+        
+        if x_metric != y_metric:
+            # Graphique de corrélation
+            fig_scatter = px.scatter(
+                kpi_df, 
+                x=x_metric, 
+                y=y_metric,
+                hover_data=['Player', 'Squad'] if 'Player' in kpi_df.columns else None,
+                title=f"{y_metric} vs {x_metric}",
+                color='Squad' if 'Squad' in kpi_df.columns else None
+            )
+            fig_scatter.update_layout(height=500)
+            st.plotly_chart(fig_scatter, use_container_width=True)
+    
+    # Top performers par métrique
+    st.subheader("Top 10 par métrique")
+    
+    if kpi_metrics:
+        selected_metric = st.selectbox("Choisir une métrique", kpi_metrics, key="kpi_top")
+        
+        # Créer le top 10
+        top_players = kpi_df.nlargest(10, selected_metric)
+        
+        if 'Player' in top_players.columns:
+            display_cols = ['Player', 'Squad', selected_metric]
+            if 'Age' in top_players.columns:
+                display_cols.insert(-1, 'Age')
+            
+            top_players_display = top_players[display_cols].copy()
+            top_players_display[selected_metric] = top_players_display[selected_metric].round(3)
+            
+            st.dataframe(top_players_display, hide_index=True, use_container_width=True)
+            
+            # Graphique en barres
+            fig_bar = px.bar(
+                top_players_display.head(10),
+                x='Player',
+                y=selected_metric,
+                title=f"Top 10 - {selected_metric}",
+                color='Squad' if 'Squad' in top_players_display.columns else None
+            )
+            fig_bar.update_xaxis(tickangle=45)
+            fig_bar.update_layout(height=400)
+            st.plotly_chart(fig_bar, use_container_width=True)
+    
+    # Distribution des métriques
+    st.subheader("Distribution des métriques")
+    
+    if kpi_metrics:
+        selected_dist_metric = st.selectbox("Métrique pour distribution", kpi_metrics, key="kpi_dist")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            # Histogramme
+            fig_hist = px.histogram(
+                kpi_df,
+                x=selected_dist_metric,
+                title=f"Distribution - {selected_dist_metric}",
+                nbins=20
+            )
+            st.plotly_chart(fig_hist, use_container_width=True)
+        
+        with col2:
+            # Box plot
+            fig_box = px.box(
+                kpi_df,
+                y=selected_dist_metric,
+                title=f"Box Plot - {selected_dist_metric}"
+            )
+            st.plotly_chart(fig_box, use_container_width=True)
+    
+    # Corrélations entre métriques
+    if len(kpi_metrics) >= 3:
+        st.subheader("Matrice de corrélation")
+        
+        # Sélectionner un sous-ensemble de métriques pour la corrélation
+        selected_corr_metrics = st.multiselect(
+            "Sélectionner les métriques pour la corrélation",
+            kpi_metrics,
+            default=kpi_metrics[:5],  # 5 premières par défaut
+            key="kpi_corr"
+        )
+        
+        if len(selected_corr_metrics) >= 2:
+            corr_data = kpi_df[selected_corr_metrics].corr()
+            
+            fig_corr = px.imshow(
+                corr_data,
+                title="Matrice de corrélation",
+                color_continuous_scale="RdBu",
+                aspect="auto"
+            )
+            fig_corr.update_layout(height=500)
+            st.plotly_chart(fig_corr, use_container_width=True)
+    
+    # Analyse par équipe
+    if 'Squad' in kpi_df.columns and len(kpi_metrics) > 0:
+        st.subheader("Analyse par équipe")
+        
+        squad_metric = st.selectbox("Métrique pour analyse par équipe", kpi_metrics, key="kpi_squad")
+        
+        # Moyenne par équipe
+        squad_avg = kpi_df.groupby('Squad')[squad_metric].agg(['mean', 'count']).reset_index()
+        squad_avg.columns = ['Squad', 'Moyenne', 'Nombre de joueurs']
+        squad_avg = squad_avg.sort_values('Moyenne', ascending=False)
+        
+        fig_squad = px.bar(
+            squad_avg.head(15),
+            x='Squad',
+            y='Moyenne',
+            title=f"Moyenne par équipe - {squad_metric}",
+            hover_data=['Nombre de joueurs']
+        )
+        fig_squad.update_xaxis(tickangle=45)
+        fig_squad.update_layout(height=400)
+        st.plotly_chart(fig_squad, use_container_width=True)
+
 # Application principale
 def main():
     st.markdown("""
@@ -634,11 +912,11 @@ def main():
     
     with col2:
         if 'Age' in filtered_data.columns and not filtered_data['Age'].isna().all():
-            avg_age = filtered_data['Age'].median()
+            avg_age = round(filtered_data['Age'].median())
             st.markdown(f"""
             <div class="kpi-container">
-                <h3>{avg_age:.1f}</h3>
-                <p>Âge médian</p>
+            <h3>{avg_age}</h3>
+            <p>Âge médian</p>
             </div>
             """, unsafe_allow_html=True)
     
@@ -662,13 +940,14 @@ def main():
             </div>
             """, unsafe_allow_html=True)
     
-    # Onglets
-    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+    # Onglets (ajout de l'onglet "Analyse KPI")
+    tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
         "Vue d'ensemble", 
         "Par poste", 
         "Comparaison", 
         "Fiche joueur",
         "Ligues & Nations",
+        "Analyse KPI",
         "Méthodologie"
     ])
     
@@ -688,6 +967,9 @@ def main():
         show_leagues_nations(filtered_data)
     
     with tab6:
+        show_kpi_analysis(filtered_data)
+    
+    with tab7:
         show_methodology()
 
 if __name__ == "__main__":

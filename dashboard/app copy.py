@@ -3,7 +3,6 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 import numpy as np
-from sklearn.preprocessing import MinMaxScaler
 from data.loader import (
     load_and_prepare_data, 
     calculate_percentiles, 
