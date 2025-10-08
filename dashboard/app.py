@@ -120,6 +120,15 @@ def create_radar_chart(data, player_names, position):
     pos_data = data[data['Position'] == position]
     colors = ['#e74c3c', '#2ecc71', '#3498db', '#f39c12', '#9b59b6']
     
+    # Calculer min/max pour chaque métrique pour la normalisation
+    metrics_ranges = {}
+    for metric in metrics:
+        if metric in pos_data.columns and pos_data[metric].notna().sum() > 0:
+            metrics_ranges[metric] = {
+                'min': pos_data[metric].min(),
+                'max': pos_data[metric].max()
+            }
+    
     for i, player_name in enumerate(player_names):
         player_data = pos_data[pos_data['Player'] == player_name]
         
@@ -128,27 +137,40 @@ def create_radar_chart(data, player_names, position):
             
         values = []
         labels = []
+        hover_texts = []
         
         for metric in metrics:
             if metric in player_data.columns and player_data[metric].notna().any():
-                # Calcul du percentile (percentile : 100 = meilleur)
                 value = player_data[metric].iloc[0]
-                if pos_data[metric].notna().sum() > 1:
-                    percentile = (pos_data[metric] <= value).mean() * 100
-                    values.append(percentile)
+                
+                # Normaliser la valeur entre 0 et 100 pour l'affichage radar
+                if metric in metrics_ranges:
+                    min_val = metrics_ranges[metric]['min']
+                    max_val = metrics_ranges[metric]['max']
+                    if max_val > min_val:
+                        normalized_value = ((value - min_val) / (max_val - min_val)) * 100
+                    else:
+                        normalized_value = 50
+                    
+                    values.append(normalized_value)
                     labels.append(metric_labels.get(metric, metric))
+                    # Ajouter la valeur réelle au hover
+                    hover_texts.append(f"{value:.2f}")
         
         if values:
             # Fermer le radar
             values.append(values[0])
             labels.append(labels[0])
+            hover_texts.append(hover_texts[0])
             
             fig.add_trace(go.Scatterpolar(
                 r=values,
                 theta=labels,
                 fill='toself',
                 name=player_name,
-                line_color=colors[i % len(colors)]
+                line_color=colors[i % len(colors)],
+                text=hover_texts,
+                hovertemplate='<b>%{theta}</b><br>Valeur: %{text}<br><extra></extra>'
             ))
     
     fig.update_layout(
@@ -158,7 +180,7 @@ def create_radar_chart(data, player_names, position):
                 range=[0, 100]
             )),
         showlegend=True,
-        title=f"Profil {position} (Percentiles)",
+        title=f"Profil {position} (Normalisé 0-100)",
         height=600
     )
     
@@ -409,7 +431,7 @@ def show_player_profile(data):
         player_info = player_data.iloc[0]
         
         # Header avec infos principales
-        col1, col2, col3, col4 = st.columns(4)
+        col1, col2, col3,  = st.columns(3)
         
         with col1:
             st.metric("Poste", player_info['Position'])
@@ -420,9 +442,20 @@ def show_player_profile(data):
         with col3:
             st.metric("Ligue", player_info['League'])
         
+        col4, col5, col6 = st.columns(3)
+        
         with col4:
             if 'Age' in player_info:
                 st.metric("Âge", f"{player_info['Age']:.0f} ans")
+        
+        with col5:
+            if 'Country' in player_info:
+                st.metric("Nationalité", player_info['Country'])
+
+        with col6:
+            if 'MP' in player_info:
+                st.metric("Matchs joués", f"{player_info['MP']:.0f}")
+
         
         # Métriques spécifiques au poste
         position = player_info['Position']
@@ -442,11 +475,56 @@ def show_player_profile(data):
                     value = player_info[metric]
                     label = metric_labels.get(metric, metric)
                     st.metric(label, f"{value:.2f}")
+
         
         # Radar individuel vs moyenne du poste
         st.subheader("Profil vs moyenne du poste")
         fig_radar = create_radar_chart(data, [player_name], position)
         st.plotly_chart(fig_radar, use_container_width=True)
+
+        st.subheader("Comparaison détaillée avec la moyenne du poste")
+
+        # Toutes les métriques disponibles pour le poste
+        all_metrics = position_metrics[position]['primary'] + position_metrics[position]['secondary']
+        available_metrics = [m for m in all_metrics if m in player_data.columns and pd.notna(player_info[m])]
+
+        # Calculer les moyennes du poste
+        pos_data = data[data['Position'] == position]
+        comparison_data = []
+
+        for metric in available_metrics[:8]:  # Limiter à 8 métriques
+            player_value = player_info[metric]
+            avg_value = pos_data[metric].mean()
+            
+            comparison_data.append({
+                'Métrique': metric_labels.get(metric, metric),
+                'Joueur': player_value,
+                'Moyenne poste': avg_value
+            })
+
+        df_comparison = pd.DataFrame(comparison_data)
+
+        # Graphique en barres groupées
+        fig = go.Figure()
+        fig.add_trace(go.Bar(
+            name='Joueur',
+            x=df_comparison['Métrique'],
+            y=df_comparison['Joueur'],
+            marker_color='#e74c3c'
+        ))
+        fig.add_trace(go.Bar(
+            name='Moyenne du poste',
+            x=df_comparison['Métrique'],
+            y=df_comparison['Moyenne poste'],
+            marker_color='#95a5a6'
+        ))
+
+        fig.update_layout(
+            barmode='group',
+            title='Comparaison avec la moyenne du poste',
+            height=400
+        )
+        st.plotly_chart(fig, use_container_width=True)
 
 def show_leagues_nations(data):
     """Page analyse ligues et nations."""
