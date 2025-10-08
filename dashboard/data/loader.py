@@ -1,115 +1,146 @@
+import os
 import pandas as pd
 import numpy as np
 import streamlit as st
-import os
 
 @st.cache_data
 def load_and_prepare_data():
     """Charge et prépare toutes les données des 4 postes."""
-    
-    # Chemins relatifs depuis le répertoire dashboard
-    base_path = "../ressources/normalized_data/"
-    
+    # Chemin vers ressources à partir de ce fichier
+    base_path = os.path.normpath(os.path.join(os.path.dirname(__file__), '..', '..', 'ressources', 'normalized_data'))
+
     files = {
         'FW': 'assembled_data_FW_normalized.csv',
-        'MF': 'assembled_data_MF_normalized.csv', 
+        'MF': 'assembled_data_MF_normalized.csv',
         'DF': 'assembled_data_DF_normalized.csv',
         'GK': 'keepers_enrichis_normalized.csv'
     }
-    
+
     all_data = []
-    
     for position, filename in files.items():
         filepath = os.path.join(base_path, filename)
-        
         if os.path.exists(filepath):
-            df = pd.read_csv(filepath)
+            try:
+                df = pd.read_csv(filepath)
+            except Exception as e:
+                st.warning(f"Impossible de lire {filename} : {e}")
+                continue
+
+            # Marquer le poste
             df['Position'] = position
+
+            # Veiller à la présence de colonnes clés
+            if 'Player' not in df.columns:
+                df['Player'] = df.iloc[:, 0].astype(str)
+
             all_data.append(df)
         else:
             st.warning(f"Fichier non trouvé: {filepath}")
-    
+
     if not all_data:
-        st.error("Aucun fichier de données trouvé!")
+        st.error("Aucun fichier de données trouvé dans ressources/normalized_data.")
         return pd.DataFrame()
-    
+
     # Concaténation
     data = pd.concat(all_data, ignore_index=True, sort=False)
-    
+
     # Nettoyage et enrichissement
     data = clean_and_enrich_data(data)
-    
+
     return data
 
-def clean_and_enrich_data(data):
+def clean_and_enrich_data(data: pd.DataFrame) -> pd.DataFrame:
     """Nettoie et enrichit les données."""
-    
-    # Conversion de l'âge en numérique
-    if 'Age' in data.columns:
-        data['Age'] = pd.to_numeric(data['Age'], errors='coerce')
-        
-        # Création des tranches d'âge
-        data['Age_Group'] = pd.cut(
-            data['Age'], 
-            bins=[0, 21, 25, 29, 50], 
+    df = data.copy()
+
+    # Player -> string
+    if 'Player' in df.columns:
+        df['Player'] = df['Player'].astype(str)
+
+    # Age numérique et tranches
+    if 'Age' in df.columns:
+        df['Age'] = pd.to_numeric(df['Age'], errors='coerce')
+        df['Age_Group'] = pd.cut(
+            df['Age'],
+            bins=[-1, 21, 25, 29, 200],
             labels=['U21', '22-25', '26-29', '30+'],
             include_lowest=True
         )
-    
-    # Normalisation des noms de ligues
-    if 'Comp' in data.columns:
+
+    # Normalisation des noms de ligues (si Comp présent)
+    if 'Comp' in df.columns:
         league_mapping = {
             'eng Premier League': 'Premier League',
-            'es La Liga': 'La Liga', 
+            'es La Liga': 'La Liga',
             'it Serie A': 'Serie A',
             'de Bundesliga': 'Bundesliga',
             'fr Ligue 1': 'Ligue 1'
         }
-        data['League'] = data['Comp'].map(league_mapping).fillna(data['Comp'])
-    
-    # Extraction du pays (code à 3 lettres)
-    if 'Nation' in data.columns:
-        data['Country'] = data['Nation'].str.extract(r'([A-Z]{3})')
-    
-    # Calcul des 90s si pas déjà fait
-    if 'Min' in data.columns and '90s' not in data.columns:
-        data['90s'] = data['Min'] / 90
-    elif '90s' in data.columns and 'Min' not in data.columns:
-        data['Min'] = data['90s'] * 90
-    
-    # Classification par expérience
-    if 'Min' in data.columns:
-        data['Experience'] = pd.cut(
-            data['Min'], 
-            bins=[0, 900, 1800, 2700, float('inf')], 
+        df['League'] = df['Comp'].map(league_mapping).fillna(df['Comp'])
+    else:
+        df['League'] = np.nan
+
+    # Extraction du code pays (Country) depuis 'Nation' si possible
+    if 'Nation' in df.columns:
+        # Cherche un code à 3 lettres (ex: ESP, FRA) sinon prend tout
+        df['Country'] = df['Nation'].astype(str).str.extract(r'([A-Z]{3})', expand=False)
+        # Si extraction vide, essayer d'extraire première partie (avant espace ou ,)
+        missing_country = df['Country'].isna()
+        if missing_country.any():
+            df.loc[missing_country, 'Country'] = df.loc[missing_country, 'Nation'].astype(str).str.split().str[-1].str.upper()
+    else:
+        df['Country'] = np.nan
+
+    # Min / 90s : harmonisation
+    if 'Min' in df.columns and '90s' not in df.columns:
+        # Si '90s' absent mais Min présent : créer 90s
+        df['90s'] = pd.to_numeric(df['Min'], errors='coerce') / 90.0
+    elif '90s' in df.columns and 'Min' not in df.columns:
+        # Si Min absent mais 90s présent : créer Min
+        df['90s'] = pd.to_numeric(df['90s'], errors='coerce')
+        df['Min'] = df['90s'] * 90.0
+    else:
+        # Forcer types numériques si présents
+        if 'Min' in df.columns:
+            df['Min'] = pd.to_numeric(df['Min'], errors='coerce')
+        if '90s' in df.columns:
+            df['90s'] = pd.to_numeric(df['90s'], errors='coerce')
+
+    # Experience binned using Min
+    if 'Min' in df.columns:
+        df['Experience'] = pd.cut(
+            df['Min'],
+            bins=[-1, 900, 1800, 2700, 1e9],
             labels=['Peu utilisé', 'Rotation', 'Titulaire', 'Indispensable'],
             include_lowest=True
         )
-    
-    # Filtrage minimum 450 minutes (5 matchs complets)
-    if 'Min' in data.columns:
-        data = data[data['Min'] >= 450]
-    
-    return data
 
-def calculate_percentiles(data, position=None, league=None):
-    """Calcule les percentiles pour les métriques clés."""
-    
+    # Filtrer joueurs avec trop peu de minutes (450 min = 5*90)
+    if 'Min' in df.columns:
+        df = df[df['Min'].fillna(0) >= 450]
+    elif '90s' in df.columns:
+        df = df[df['90s'].fillna(0) >= 5]
+
+    # Nettoyage final : reset index
+    df = df.reset_index(drop=True)
+
+    return df
+
+def calculate_percentiles(data: pd.DataFrame, position: str = None, league: str = None) -> pd.DataFrame:
+    """Calcule les percentiles pour les métriques clés (_per_90)."""
     df = data.copy()
-    
-    # Filtrage selon position et ligue
+
     if position:
         df = df[df['Position'] == position]
     if league:
         df = df[df['League'] == league]
-    
-    # Colonnes métriques (celles qui finissent par _per_90)
+
     metric_cols = [col for col in df.columns if col.endswith('_per_90') and df[col].notna().sum() > 0]
-    
-    # Calcul des percentiles
+
     for col in metric_cols:
-        df[f'{col}_percentile'] = df[col].rank(pct=True) * 100
-    
+        # Percentile par colonne
+        df[f'{col}_percentile'] = df[col].rank(pct=True, method='max') * 100
+
     return df
 
 def get_position_metrics():

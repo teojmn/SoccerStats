@@ -199,16 +199,15 @@ def create_sidebar_filters(data):
         )
         filters['age_range'] = age_range
     
-    # Filtre Minutes minimum
-    if 'Min' in data.columns:
-        min_minutes = st.sidebar.slider(
-            "Minutes minimum",
-            min_value=450,
-            max_value=3500,
-            value=450,
-            step=90
+    # Filtre Nationalité -> utiliser 'Nation' uniquement
+    if 'Nation' in data.columns and data['Nation'].notna().any():
+        nation_values = [str(v) for v in data['Nation'].dropna().unique()]
+        selected = st.sidebar.multiselect(
+            "Nationalité",
+            options=sorted(nation_values),
+            default=sorted(nation_values)
         )
-        filters['min_minutes'] = min_minutes
+        filters['nations'] = {'col': 'Nation', 'values': selected}
     
     return filters
 
@@ -226,8 +225,17 @@ def apply_filters(data, filters):
         min_age, max_age = filters['age_range']
         df = df[(df['Age'] >= min_age) & (df['Age'] <= max_age)]
     
+    # Si tu veux un filtre minutes (ajoute slider dans create_sidebar_filters)
     if 'min_minutes' in filters and 'Min' in df.columns:
         df = df[df['Min'] >= filters['min_minutes']]
+    
+    # Application du filtre Nationalité : filtrer simplement par inclusion
+    if 'nations' in filters and filters['nations']:
+        nat = filters['nations']
+        col = nat.get('col')
+        vals = nat.get('values', [])
+        if col and vals:
+            df = df[df[col].isin(vals)]
     
     return df
 
@@ -260,12 +268,22 @@ def show_overview(data):
     with col2:
         st.subheader("Top 10 nationalités")
         
-        if 'Country' in data.columns:
-            top_countries = data['Country'].value_counts().head(10)
+        # Choisir la colonne disponible pour la nationalité
+        if 'Country' in data.columns and data['Country'].notna().any():
+            col = 'Country'
+        elif 'Nation' in data.columns and data['Nation'].notna().any():
+            col = 'Nation'
+        else:
+            col = None
+        
+        if col:
+            top_countries = data[col].dropna().astype(str).value_counts().head(10)
+            df_countries = top_countries.reset_index()
+            df_countries.columns = ['Nation', 'Count']
             fig_countries = create_bar_chart(
-                top_countries.reset_index(),
-                x_col='Country',
-                y_col='count',
+                df_countries,
+                x_col='Nation',
+                y_col='Count',
                 title="Joueurs par nationalité"
             )
             st.plotly_chart(fig_countries, use_container_width=True)
@@ -453,15 +471,26 @@ def show_leagues_nations(data):
     # Top nations
     st.subheader("Représentation par nationalité")
     
-    if 'Country' in data.columns:
-        country_stats = data['Country'].value_counts().head(15)
-        
+    # Choisir la colonne disponible pour la nationalité
+    if 'Country' in data.columns and data['Country'].notna().any():
+        col = 'Country'
+    elif 'Nation' in data.columns and data['Nation'].notna().any():
+        col = 'Nation'
+    else:
+        col = None
+
+    if col:
+        country_stats = data[col].dropna().astype(str).value_counts().head(15)
+        df_countries = country_stats.reset_index()
+        df_countries.columns = ['Nation', 'Count']
+
         fig = px.bar(
-            x=country_stats.values,
-            y=country_stats.index,
+            df_countries,
+            x='Count',
+            y='Nation',
             orientation='h',
             title="Top 15 des nationalités",
-            labels={'x': 'Nombre de joueurs', 'y': 'Pays'}
+            labels={'Count': 'Nombre de joueurs', 'Nation': 'Pays'}
         )
         fig.update_layout(height=600)
         st.plotly_chart(fig, use_container_width=True)
