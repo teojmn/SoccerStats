@@ -309,31 +309,7 @@ def show_overview(data):
                 title="Joueurs par nationalité"
             )
             st.plotly_chart(fig_countries, use_container_width=True)
-    
-    # Scatter plot configurable
-    st.subheader("Analyse globale")
-    
-    # Récupérer les métriques _per_90 disponibles
-    metric_cols = [col for col in data.columns if col.endswith('_per_90') and data[col].notna().sum() > 0]
-    
-    if len(metric_cols) >= 2:
-        col1, col2, col3 = st.columns(3)
-        
-        with col1:
-            x_metric = st.selectbox("Métrique X", options=metric_cols, index=0)
-        
-        with col2:
-            y_metric = st.selectbox("Métrique Y", options=metric_cols, index=1)
-        
-        with col3:
-            color_by = st.selectbox("Couleur par", options=['Position', 'League'], index=0)
-        
-        if x_metric and y_metric:
-            fig_scatter = create_scatter_plot(
-                data, x_metric, y_metric, color_by,
-                title=f"{get_metric_labels().get(y_metric, y_metric)} vs {get_metric_labels().get(x_metric, x_metric)}"
-            )
-            st.plotly_chart(fig_scatter, use_container_width=True)
+
 
 def show_by_position(data):
     """Page analyse par poste."""
