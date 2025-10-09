@@ -5,6 +5,4 @@ matplotlib
 scipy
 seaborn
 statsmodels
-statsmodels.api
 plotly
-pages

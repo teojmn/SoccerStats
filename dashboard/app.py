@@ -687,7 +687,7 @@ def load_kpi_data():
     
     kpi_files = {
         'FW': 'kpi_fw.csv',
-        'DF': 'kpi_df.csv',
+        'DF': 'KPI_df.csv',
     }
     
     for position, filename in kpi_files.items():
@@ -701,177 +701,943 @@ def load_kpi_data():
     
     return kpi_data
 
-def show_kpi_analysis(data):
-    """Analyse des KPI par poste."""
-    st.header("📊 Analyse des KPI")
+@st.cache_data
+def load_kpi_definitions():
+    """Charge les définitions des KPI depuis les fichiers de résumé."""
+    definitions = {}
+    base_path = os.path.join(os.path.dirname(__file__), '..', 'ressources', 'KPI')
     
-    # Charger les données KPI
+    definition_files = {
+        'FW': 'kpi_sum_FW.csv',
+        'DF': 'KPI_sum_DF.csv',
+    }
+    
+    for position, filename in definition_files.items():
+        filepath = os.path.join(base_path, filename)
+        if os.path.exists(filepath):
+            try:
+                df = pd.read_csv(filepath)
+                definitions[position] = df.set_index('KPI').to_dict('index')
+            except Exception as e:
+                st.warning(f"Erreur lors du chargement des définitions {filename}: {e}")
+    
+    return definitions
+
+def show_kpi_analysis(data):
+    """🚀 Tableau de bord KPI avancé - Analyse approfondie des performances."""
+    
+    # Header personnalisé avec style
+    st.markdown("""
+    <div style="background: linear-gradient(90deg, #667eea 0%, #764ba2 100%); 
+                padding: 2rem; border-radius: 15px; margin-bottom: 2rem; text-align: center;">
+        <h1 style="color: white; margin: 0; font-size: 2.5rem;">🏆 Analytics KPI Avancés</h1>
+        <p style="color: white; margin: 0.5rem 0 0 0; font-size: 1.2rem; opacity: 0.9;">
+            Analyses détaillées des performances par métriques clés
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # Charger les données KPI et leurs définitions
     kpi_data = load_kpi_data()
+    kpi_definitions = load_kpi_definitions()
     
     if not kpi_data:
-        st.warning("Aucune donnée KPI disponible.")
+        st.error("❌ Aucune donnée KPI disponible.")
         return
     
-    # Sélection du poste
-    available_positions = list(kpi_data.keys())
-    selected_position = st.selectbox("Choisir un poste pour l'analyse KPI", available_positions)
+    # === SECTION 1: SÉLECTION ET CONFIGURATION ===
+    st.markdown("### 🎯 Configuration de l'analyse")
+    
+    col1, col2, col3 = st.columns([2, 2, 1])
+    
+    with col1:
+        available_positions = list(kpi_data.keys())
+        position_labels = {'FW': '⚽ Attaquants', 'DF': '🛡️ Défenseurs', 'MF': '🎯 Milieux', 'GK': '🥅 Gardiens'}
+        
+        selected_position = st.selectbox(
+            "Choisir un poste",
+            available_positions,
+            format_func=lambda x: position_labels.get(x, x),
+            key="main_position_select"
+        )
+    
+    with col2:
+        analysis_mode = st.selectbox(
+            "Mode d'analyse",
+            ["🔍 Vue d'ensemble", "📊 KPI Détaillés", "🏅 Comparaisons", "📈 Tendances"],
+            key="analysis_mode"
+        )
+    
+    with col3:
+        st.markdown("**Filtres actifs**")
+        show_filters = st.checkbox("Afficher filtres", value=False)
     
     if selected_position not in kpi_data:
-        st.error(f"Données KPI non disponibles pour {selected_position}")
+        st.error(f"❌ Données KPI non disponibles pour {selected_position}")
         return
     
     kpi_df = kpi_data[selected_position]
+    kpi_def = kpi_definitions.get(selected_position, {})
     
-    # Vue d'ensemble des KPI
-    st.subheader(f"Vue d'ensemble - {selected_position}")
+    # Obtenir les métriques KPI disponibles
+    if selected_position == 'FW':
+        player_col = 'Player'
+        squad_col = 'Squad'
+        exclude_cols = ['Age', 'Min', '90s', 'MainPos']
+    else:  # DF
+        player_col = 'Nom du joueur'
+        squad_col = 'Équipe'  
+        exclude_cols = ['Poste']
     
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.metric("Nombre de joueurs", len(kpi_df))
-        st.metric("Équipes représentées", kpi_df['Squad'].nunique() if 'Squad' in kpi_df.columns else "N/A")
-    
-    with col2:
-        if 'Age' in kpi_df.columns:
-            st.metric("Âge moyen", f"{kpi_df['Age'].mean():.1f} ans")
-        if 'Min' in kpi_df.columns:
-            st.metric("Minutes moyennes", f"{kpi_df['Min'].mean():.0f}")
-    
-    # Sélection des métriques KPI à analyser
-    st.subheader("Analyse des métriques clés")
-    
-    # Obtenir les colonnes numériques (KPI)
     numeric_cols = kpi_df.select_dtypes(include=[np.number]).columns.tolist()
-    # Exclure les colonnes d'info de base
-    exclude_cols = ['Age', 'Min', '90s']
     kpi_metrics = [col for col in numeric_cols if col not in exclude_cols]
     
-    if len(kpi_metrics) >= 2:
-        col1, col2 = st.columns(2)
+    # Filtres optionnels
+    filtered_df = kpi_df.copy()
+    if show_filters:
+        st.markdown("---")
+        filter_col1, filter_col2, filter_col3 = st.columns(3)
         
-        with col1:
-            x_metric = st.selectbox("Métrique X", kpi_metrics, key="kpi_x")
+        with filter_col1:
+            if squad_col in kpi_df.columns:
+                selected_teams = st.multiselect(
+                    "Équipes", 
+                    options=sorted(kpi_df[squad_col].unique()),
+                    default=sorted(kpi_df[squad_col].unique()),
+                    key="team_filter"
+                )
+                if selected_teams:
+                    filtered_df = filtered_df[filtered_df[squad_col].isin(selected_teams)]
         
-        with col2:
-            y_metric = st.selectbox("Métrique Y", kpi_metrics, 
-                                  index=1 if len(kpi_metrics) > 1 else 0, key="kpi_y")
+        with filter_col2:
+            if 'Age' in kpi_df.columns:
+                age_range = st.slider(
+                    "Âge",
+                    min_value=int(kpi_df['Age'].min()),
+                    max_value=int(kpi_df['Age'].max()), 
+                    value=(int(kpi_df['Age'].min()), int(kpi_df['Age'].max())),
+                    key="age_filter"
+                )
+                filtered_df = filtered_df[(filtered_df['Age'] >= age_range[0]) & (filtered_df['Age'] <= age_range[1])]
         
-        if x_metric != y_metric:
-            # Graphique de corrélation
-            fig_scatter = px.scatter(
-                kpi_df, 
-                x=x_metric, 
-                y=y_metric,
-                hover_data=['Player', 'Squad'] if 'Player' in kpi_df.columns else None,
-                title=f"{y_metric} vs {x_metric}",
-                color='Squad' if 'Squad' in kpi_df.columns else None
-            )
-            fig_scatter.update_layout(height=500)
-            st.plotly_chart(fig_scatter, use_container_width=True)
+        with filter_col3:
+            if 'Min' in kpi_df.columns:
+                min_minutes = st.slider(
+                    "Minutes min.",
+                    min_value=int(kpi_df['Min'].min()),
+                    max_value=int(kpi_df['Min'].max()),
+                    value=int(kpi_df['Min'].min()),
+                    key="minutes_filter"
+                )
+                filtered_df = filtered_df[filtered_df['Min'] >= min_minutes]
     
-    # Top performers par métrique
-    st.subheader("Top 10 par métrique")
+    st.markdown("---")
     
-    if kpi_metrics:
-        selected_metric = st.selectbox("Choisir une métrique", kpi_metrics, key="kpi_top")
-        
-        # Créer le top 10
-        top_players = kpi_df.nlargest(10, selected_metric)
-        
-        if 'Player' in top_players.columns:
-            display_cols = ['Player', 'Squad', selected_metric]
-            if 'Age' in top_players.columns:
-                display_cols.insert(-1, 'Age')
+    # === SECTION 2: INDICATEURS CLÉS ===
+    st.markdown("### 📋 Indicateurs de l'échantillon")
+    
+    kpi_col1, kpi_col2, kpi_col3, kpi_col4, kpi_col5 = st.columns(5)
+    
+    with kpi_col1:
+        st.markdown(f"""
+        <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
+                    padding: 1rem; border-radius: 10px; text-align: center; color: white;">
+            <h2 style="margin: 0; font-size: 2rem;">{len(filtered_df)}</h2>
+            <p style="margin: 0; opacity: 0.8;">Joueurs analysés</p>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    with kpi_col2:
+        teams_count = filtered_df[squad_col].nunique() if squad_col in filtered_df.columns else 0
+        st.markdown(f"""
+        <div style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); 
+                    padding: 1rem; border-radius: 10px; text-align: center; color: white;">
+            <h2 style="margin: 0; font-size: 2rem;">{teams_count}</h2>
+            <p style="margin: 0; opacity: 0.8;">Équipes</p>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    with kpi_col3:
+        if 'Age' in filtered_df.columns:
+            avg_age = filtered_df['Age'].mean()
+            st.markdown(f"""
+            <div style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); 
+                        padding: 1rem; border-radius: 10px; text-align: center; color: white;">
+                <h2 style="margin: 0; font-size: 2rem;">{avg_age:.1f}</h2>
+                <p style="margin: 0; opacity: 0.8;">Âge moyen</p>
+            </div>
+            """, unsafe_allow_html=True)
+    
+    with kpi_col4:
+        if 'Min' in filtered_df.columns:
+            avg_minutes = filtered_df['Min'].mean()
+            st.markdown(f"""
+            <div style="background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%); 
+                        padding: 1rem; border-radius: 10px; text-align: center; color: white;">
+                <h2 style="margin: 0; font-size: 2rem;">{avg_minutes:.0f}</h2>
+                <p style="margin: 0; opacity: 0.8;">Minutes moy.</p>
+            </div>
+            """, unsafe_allow_html=True)
+    
+    with kpi_col5:
+        st.markdown(f"""
+        <div style="background: linear-gradient(135deg, #fa709a 0%, #fee140 100%); 
+                    padding: 1rem; border-radius: 10px; text-align: center; color: white;">
+            <h2 style="margin: 0; font-size: 2rem;">{len(kpi_metrics)}</h2>
+            <p style="margin: 0; opacity: 0.8;">KPI analysés</p>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    st.markdown("---")
+    
+    # === SECTION 3: CONTENU SELON LE MODE SÉLECTIONNÉ ===
+    
+    if analysis_mode == "🔍 Vue d'ensemble":
+        show_kpi_overview(filtered_df, kpi_metrics, kpi_def, player_col, squad_col)
+    
+    elif analysis_mode == "📊 KPI Détaillés":
+        show_kpi_detailed(filtered_df, kpi_metrics, kpi_def, player_col, squad_col)
+    
+    elif analysis_mode == "🏅 Comparaisons":
+        show_kpi_comparisons(filtered_df, kpi_metrics, kpi_def, player_col, squad_col)
+    
+    elif analysis_mode == "📈 Tendances":
+        show_kpi_trends(filtered_df, kpi_metrics, kpi_def, player_col, squad_col)
+
+def show_kpi_overview(df, metrics, definitions, player_col, squad_col):
+    """Vue d'ensemble des KPI."""
+    st.markdown("### 🔍 Vue d'ensemble des performances")
+    
+    if not metrics:
+        st.warning("Aucune métrique KPI disponible")
+        return
+    
+    # === TOP MÉTRIQUES ===
+    st.markdown("#### 🏆 Métriques les plus impactantes")
+    
+    # Calculer la variance normalisée pour identifier les métriques les plus discriminantes
+    metric_importance = []
+    for metric in metrics:
+        if df[metric].std() > 0:
+            cv = df[metric].std() / df[metric].mean() if df[metric].mean() != 0 else 0
+            metric_importance.append((metric, cv, df[metric].mean(), df[metric].std()))
+    
+    # Trier par coefficient de variation
+    metric_importance.sort(key=lambda x: x[1], reverse=True)
+    top_metrics = metric_importance[:6]
+    
+    cols = st.columns(3)
+    for i, (metric, cv, mean_val, std_val) in enumerate(top_metrics):
+        with cols[i % 3]:
+            # Obtenir la définition si disponible
+            definition = definitions.get(metric, {})
+            justification = definition.get('Justification', 'Métrique de performance')
             
-            top_players_display = top_players[display_cols].copy()
-            top_players_display[selected_metric] = top_players_display[selected_metric].round(3)
-            
-            st.dataframe(top_players_display, hide_index=True, use_container_width=True)
-            
-            # Graphique en barres
-            fig_bar = px.bar(
-                top_players_display.head(10),
-                x='Player',
-                y=selected_metric,
-                title=f"Top 10 - {selected_metric}",
-                color='Squad' if 'Squad' in top_players_display.columns else None
-            )
-            fig_bar.update_xaxis(tickangle=45)
-            fig_bar.update_layout(height=400)
-            st.plotly_chart(fig_bar, use_container_width=True)
+            st.markdown(f"""
+            <div style="border: 2px solid #e1e5e9; border-radius: 10px; padding: 1rem; margin-bottom: 1rem;">
+                <h4 style="color: #1f77b4; margin-top: 0;">{metric}</h4>
+                <p style="font-size: 0.85em; color: #666; margin: 0.5rem 0;">{justification}</p>
+                <div style="display: flex; justify-content: space-between;">
+                    <span><strong>Moyenne:</strong> {mean_val:.2f}</span>
+                    <span><strong>Écart-type:</strong> {std_val:.2f}</span>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
     
-    # Distribution des métriques
-    st.subheader("Distribution des métriques")
+    st.markdown("---")
     
-    if kpi_metrics:
-        selected_dist_metric = st.selectbox("Métrique pour distribution", kpi_metrics, key="kpi_dist")
+    # === ANALYSE DE CORRÉLATION ===
+    st.markdown("#### 🔗 Analyse des corrélations")
+    
+    if len(metrics) >= 3:
+        # Sélectionner les métriques les plus importantes pour la corrélation
+        top_metrics_names = [m[0] for m in metric_importance[:8]]
         
-        col1, col2 = st.columns(2)
+        corr_matrix = df[top_metrics_names].corr()
+        
+        # Graphique de corrélation avec annotations
+        fig_corr = px.imshow(
+            corr_matrix,
+            title="Matrice de corrélation des KPI principaux",
+            color_continuous_scale="RdBu",
+            aspect="auto",
+            text_auto=True
+        )
+        fig_corr.update_layout(height=600)
+        fig_corr.update_traces(texttemplate="%{z:.2f}", textfont_size=10)
+        
+        st.plotly_chart(fig_corr, use_container_width=True)
+        
+        # Insights sur les corrélations
+        st.markdown("##### 💡 Insights clés")
+        
+        # Trouver les corrélations les plus fortes (hors diagonale)
+        corr_pairs = []
+        for i in range(len(corr_matrix.columns)):
+            for j in range(i + 1, len(corr_matrix.columns)):
+                corr_val = corr_matrix.iloc[i, j]
+                if abs(corr_val) > 0.3:  # Seuil de corrélation significative
+                    corr_pairs.append((corr_matrix.columns[i], corr_matrix.columns[j], corr_val))
+        
+        corr_pairs.sort(key=lambda x: abs(x[2]), reverse=True)
+        
+        if corr_pairs:
+            insight_cols = st.columns(2)
+            for i, (metric1, metric2, corr_val) in enumerate(corr_pairs[:6]):
+                with insight_cols[i % 2]:
+                    direction = "🔺 Positive" if corr_val > 0 else "🔻 Négative"
+                    strength = "forte" if abs(corr_val) > 0.7 else "modérée" if abs(corr_val) > 0.5 else "faible"
+                    
+                    st.markdown(f"""
+                    <div style="background: #f8f9fa; padding: 0.8rem; border-radius: 8px; margin-bottom: 0.5rem;">
+                        <strong>{metric1}</strong> ↔ <strong>{metric2}</strong><br>
+                        {direction} ({corr_val:.2f}) - Corrélation {strength}
+                    </div>
+                    """, unsafe_allow_html=True)
+    
+    st.markdown("---")
+    
+    # === DISTRIBUTION GÉNÉRALE ===
+    st.markdown("#### 📊 Distribution des performances")
+    
+    if len(metrics) >= 1:
+        # Permettre à l'utilisateur de choisir une métrique pour voir sa distribution
+        selected_metric = st.selectbox(
+            "Choisir une métrique pour analyser sa distribution:",
+            metrics,
+            key="overview_metric_dist"
+        )
+        
+        col1, col2, col3 = st.columns(3)
         
         with col1:
             # Histogramme
             fig_hist = px.histogram(
-                kpi_df,
-                x=selected_dist_metric,
-                title=f"Distribution - {selected_dist_metric}",
-                nbins=20
+                df, 
+                x=selected_metric,
+                title=f"Distribution - {selected_metric}",
+                nbins=25,
+                marginal="box"
             )
+            fig_hist.update_layout(height=400)
             st.plotly_chart(fig_hist, use_container_width=True)
         
         with col2:
-            # Box plot
-            fig_box = px.box(
-                kpi_df,
-                y=selected_dist_metric,
-                title=f"Box Plot - {selected_dist_metric}"
-            )
-            st.plotly_chart(fig_box, use_container_width=True)
-    
-    # Corrélations entre métriques
-    if len(kpi_metrics) >= 3:
-        st.subheader("Matrice de corrélation")
+            # Box plot par équipe (top 10)
+            if squad_col in df.columns:
+                top_teams = df[squad_col].value_counts().head(10).index
+                df_top_teams = df[df[squad_col].isin(top_teams)]
+                
+                fig_box = px.box(
+                    df_top_teams,
+                    x=squad_col,
+                    y=selected_metric,
+                    title=f"{selected_metric} par équipe (Top 10)"
+                )
+                fig_box.update_xaxes(tickangle=45)
+                fig_box.update_layout(height=400)
+                st.plotly_chart(fig_box, use_container_width=True)
         
-        # Sélectionner un sous-ensemble de métriques pour la corrélation
-        selected_corr_metrics = st.multiselect(
-            "Sélectionner les métriques pour la corrélation",
-            kpi_metrics,
-            default=kpi_metrics[:5],  # 5 premières par défaut
-            key="kpi_corr"
-        )
-        
-        if len(selected_corr_metrics) >= 2:
-            corr_data = kpi_df[selected_corr_metrics].corr()
+        with col3:
+            # Statistiques descriptives
+            stats = df[selected_metric].describe()
             
-            fig_corr = px.imshow(
-                corr_data,
-                title="Matrice de corrélation",
-                color_continuous_scale="RdBu",
-                aspect="auto"
-            )
-            fig_corr.update_layout(height=500)
-            st.plotly_chart(fig_corr, use_container_width=True)
+            st.markdown(f"""
+            <div style="background: #f8f9fa; padding: 1rem; border-radius: 10px;">
+                <h5>📈 Statistiques - {selected_metric}</h5>
+                <table style="width: 100%; font-size: 0.9em;">
+                    <tr><td>Minimum</td><td><strong>{stats['min']:.2f}</strong></td></tr>
+                    <tr><td>Q1 (25%)</td><td><strong>{stats['25%']:.2f}</strong></td></tr>
+                    <tr><td>Médiane</td><td><strong>{stats['50%']:.2f}</strong></td></tr>
+                    <tr><td>Q3 (75%)</td><td><strong>{stats['75%']:.2f}</strong></td></tr>
+                    <tr><td>Maximum</td><td><strong>{stats['max']:.2f}</strong></td></tr>
+                    <tr><td>Moyenne</td><td><strong>{stats['mean']:.2f}</strong></td></tr>
+                    <tr><td>Écart-type</td><td><strong>{stats['std']:.2f}</strong></td></tr>
+                </table>
+            </div>
+            """, unsafe_allow_html=True)
+
+def show_kpi_detailed(df, metrics, definitions, player_col, squad_col):
+    """Analyse détaillée des KPI avec sélection interactive."""
+    st.markdown("### 📊 Analyse détaillée des KPI")
     
-    # Analyse par équipe
-    if 'Squad' in kpi_df.columns and len(kpi_metrics) > 0:
-        st.subheader("Analyse par équipe")
-        
-        squad_metric = st.selectbox("Métrique pour analyse par équipe", kpi_metrics, key="kpi_squad")
-        
-        # Moyenne par équipe
-        squad_avg = kpi_df.groupby('Squad')[squad_metric].agg(['mean', 'count']).reset_index()
-        squad_avg.columns = ['Squad', 'Moyenne', 'Nombre de joueurs']
-        squad_avg = squad_avg.sort_values('Moyenne', ascending=False)
-        
-        fig_squad = px.bar(
-            squad_avg.head(15),
-            x='Squad',
-            y='Moyenne',
-            title=f"Moyenne par équipe - {squad_metric}",
-            hover_data=['Nombre de joueurs']
+    if not metrics:
+        st.warning("Aucune métrique KPI disponible")
+        return
+    
+    # === SÉLECTION DE MÉTRIQUES ===
+    st.markdown("#### 🎯 Sélection des métriques à analyser")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        selected_metrics = st.multiselect(
+            "Choisir les métriques à analyser (max 6):",
+            metrics,
+            default=metrics[:4],
+            max_selections=6,
+            key="detailed_metrics_select"
         )
-        fig_squad.update_xaxis(tickangle=45)
-        fig_squad.update_layout(height=400)
-        st.plotly_chart(fig_squad, use_container_width=True)
+    
+    with col2:
+        if len(selected_metrics) >= 2:
+            comparison_type = st.selectbox(
+                "Type de comparaison:",
+                ["Scatter plots", "Radar charts", "Distributions", "Rankings"],
+                key="comparison_type"
+            )
+    
+    if not selected_metrics:
+        st.warning("Veuillez sélectionner au moins une métrique.")
+        return
+    
+    st.markdown("---")
+    
+    # === DÉFINITIONS DES MÉTRIQUES SÉLECTIONNÉES ===
+    st.markdown("#### 📋 Définitions des métriques sélectionnées")
+    
+    def_cols = st.columns(min(3, len(selected_metrics)))
+    for i, metric in enumerate(selected_metrics):
+        with def_cols[i % 3]:
+            definition = definitions.get(metric, {})
+            justification = definition.get('Justification', 'Description non disponible')
+            calcul = definition.get('Calcul', 'Formule non disponible')
+            
+            st.markdown(f"""
+            <div style="border-left: 4px solid #1f77b4; background: #f8f9fa; padding: 1rem; margin-bottom: 1rem;">
+                <h5 style="color: #1f77b4; margin-top: 0;">{metric}</h5>
+                <p><strong>Description:</strong> {justification}</p>
+                <p><strong>Calcul:</strong> <code>{calcul}</code></p>
+            </div>
+            """, unsafe_allow_html=True)
+    
+    st.markdown("---")
+    
+    # === ANALYSES SELON LE TYPE SÉLECTIONNÉ ===
+    
+    if comparison_type == "Scatter plots" and len(selected_metrics) >= 2:
+        st.markdown("#### 📈 Analyses de corrélation")
+        
+        scatter_col1, scatter_col2 = st.columns(2)
+        with scatter_col1:
+            x_metric = st.selectbox("Axe X:", selected_metrics, key="scatter_x")
+        with scatter_col2:
+            y_metric = st.selectbox("Axe Y:", selected_metrics, 
+                                  index=1 if len(selected_metrics) > 1 else 0, key="scatter_y")
+        
+        if x_metric != y_metric:
+            # Calcul de la corrélation
+            correlation = df[x_metric].corr(df[y_metric])
+            
+            # Graphique scatter avec ligne de tendance
+            fig_scatter = px.scatter(
+                df,
+                x=x_metric,
+                y=y_metric,
+                color=squad_col if squad_col in df.columns else None,
+                hover_data=[player_col] if player_col in df.columns else None,
+                title=f"{y_metric} vs {x_metric} (r = {correlation:.3f})",
+                trendline="ols"
+            )
+            fig_scatter.update_layout(height=600)
+            st.plotly_chart(fig_scatter, use_container_width=True)
+            
+            # Interprétation de la corrélation
+            if abs(correlation) > 0.7:
+                strength = "forte"
+                color = "#28a745"
+            elif abs(correlation) > 0.5:
+                strength = "modérée"
+                color = "#ffc107"
+            else:
+                strength = "faible"
+                color = "#dc3545"
+            
+            direction = "positive" if correlation > 0 else "négative"
+            
+            st.markdown(f"""
+            <div style="background: {color}20; border-left: 4px solid {color}; padding: 1rem; margin: 1rem 0;">
+                <strong>💡 Interprétation:</strong> Corrélation {direction} {strength} (r = {correlation:.3f}) 
+                entre {x_metric} et {y_metric}.
+            </div>
+            """, unsafe_allow_html=True)
+    
+    elif comparison_type == "Distributions":
+        st.markdown("#### 📊 Analyse des distributions")
+        
+        # Graphiques de distribution pour toutes les métriques sélectionnées
+        n_cols = min(3, len(selected_metrics))
+        cols = st.columns(n_cols)
+        
+        for i, metric in enumerate(selected_metrics):
+            with cols[i % n_cols]:
+                fig_dist = px.histogram(
+                    df,
+                    x=metric,
+                    title=f"Distribution - {metric}",
+                    nbins=20,
+                    marginal="box"
+                )
+                fig_dist.update_layout(height=400)
+                st.plotly_chart(fig_dist, use_container_width=True)
+        
+        # Tableau comparatif des statistiques
+        st.markdown("##### 📋 Statistiques comparatives")
+        
+        stats_df = df[selected_metrics].describe().round(3).T
+        stats_df['CV'] = (stats_df['std'] / stats_df['mean']).round(3)  # Coefficient de variation
+        
+        st.dataframe(stats_df, use_container_width=True)
+    
+    elif comparison_type == "Rankings":
+        st.markdown("#### 🏅 Classements par métrique")
+        
+        ranking_metric = st.selectbox(
+            "Choisir la métrique pour le classement:",
+            selected_metrics,
+            key="ranking_metric"
+        )
+        
+        n_top = st.slider("Nombre de joueurs à afficher:", 5, 20, 10, key="ranking_n_top")
+        
+        # Top performers
+        top_performers = df.nlargest(n_top, ranking_metric)
+        
+        # Graphique en barres
+        fig_ranking = px.bar(
+            top_performers,
+            x=player_col,
+            y=ranking_metric,
+            color=squad_col if squad_col in df.columns else None,
+            title=f"Top {n_top} - {ranking_metric}",
+            text=ranking_metric
+        )
+        fig_ranking.update_traces(texttemplate='%{text:.2f}', textposition='outside')
+        fig_ranking.update_xaxes(tickangle=45)
+        fig_ranking.update_layout(height=500)
+        st.plotly_chart(fig_ranking, use_container_width=True)
+        
+        # Tableau détaillé
+        display_cols = [player_col, squad_col] if squad_col in df.columns else [player_col]
+        display_cols.extend(selected_metrics)
+        
+        if 'Age' in df.columns:
+            display_cols.insert(-len(selected_metrics), 'Age')
+        
+        ranking_table = top_performers[display_cols].round(3)
+        ranking_table.index = range(1, len(ranking_table) + 1)  # Numérotation à partir de 1
+        
+        st.markdown("##### 📋 Classement détaillé")
+        st.dataframe(ranking_table, use_container_width=True)
+
+def show_kpi_comparisons(df, metrics, definitions, player_col, squad_col):
+    """Comparaisons avancées entre joueurs et équipes."""
+    st.markdown("### 🏅 Comparaisons avancées")
+    
+    if not metrics:
+        st.warning("Aucune métrique KPI disponible")
+        return
+    
+    # === TYPE DE COMPARAISON ===
+    comparison_mode = st.selectbox(
+        "Type de comparaison:",
+        ["👤 Joueurs vs Joueurs", "⚽ Équipes vs Équipes", "🎯 Joueur vs Moyenne Poste"],
+        key="comparison_mode"
+    )
+    
+    st.markdown("---")
+    
+    if comparison_mode == "👤 Joueurs vs Joueurs":
+        st.markdown("#### 👤 Comparaison entre joueurs")
+        
+        # Sélection de joueurs
+        selected_players = st.multiselect(
+            "Choisir les joueurs à comparer (max 5):",
+            df[player_col].tolist(),
+            max_selections=5,
+            key="players_comparison"
+        )
+        
+        if len(selected_players) >= 2:
+            # Métriques à comparer
+            comparison_metrics = st.multiselect(
+                "Métriques à comparer:",
+                metrics,
+                default=metrics[:6],
+                key="players_comparison_metrics"
+            )
+            
+            if comparison_metrics:
+                # Données des joueurs sélectionnés
+                players_data = df[df[player_col].isin(selected_players)]
+                
+                # Graphique radar
+                fig_radar = go.Figure()
+                
+                colors = ['#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b']
+                
+                for i, player in enumerate(selected_players):
+                    player_data = players_data[players_data[player_col] == player]
+                    if not player_data.empty:
+                        values = []
+                        for metric in comparison_metrics:
+                            # Normaliser par percentile
+                            percentile = (df[metric] <= player_data[metric].iloc[0]).mean() * 100
+                            values.append(percentile)
+                        
+                        # Fermer le radar
+                        values.append(values[0])
+                        metrics_labels = comparison_metrics + [comparison_metrics[0]]
+                        
+                        fig_radar.add_trace(go.Scatterpolar(
+                            r=values,
+                            theta=metrics_labels,
+                            fill='toself',
+                            name=player,
+                            line=dict(color=colors[i % len(colors)])
+                        ))
+                
+                fig_radar.update_layout(
+                    polar=dict(radialaxis=dict(visible=True, range=[0, 100])),
+                    showlegend=True,
+                    title="Profils comparés (Percentiles 0-100)",
+                    height=600
+                )
+                
+                st.plotly_chart(fig_radar, use_container_width=True)
+                
+                # Tableau comparatif détaillé
+                st.markdown("##### 📊 Tableau comparatif")
+                
+                comparison_table = players_data[[player_col, squad_col] + comparison_metrics].round(3)
+                st.dataframe(comparison_table, use_container_width=True, hide_index=True)
+    
+    elif comparison_mode == "⚽ Équipes vs Équipes":
+        st.markdown("#### ⚽ Comparaison entre équipes")
+        
+        if squad_col in df.columns:
+            # Sélection d'équipes
+            selected_teams = st.multiselect(
+                "Choisir les équipes à comparer:",
+                sorted(df[squad_col].unique()),
+                default=sorted(df[squad_col].unique())[:5],
+                key="teams_comparison"
+            )
+            
+            if selected_teams:
+                # Métrique à analyser
+                team_metric = st.selectbox(
+                    "Métrique à analyser:",
+                    metrics,
+                    key="team_comparison_metric"
+                )
+                
+                # Calculer les moyennes par équipe
+                team_stats = df[df[squad_col].isin(selected_teams)].groupby(squad_col)[team_metric].agg([
+                    'mean', 'median', 'std', 'count'
+                ]).round(3)
+                team_stats.columns = ['Moyenne', 'Médiane', 'Écart-type', 'Nb joueurs']
+                team_stats = team_stats.sort_values('Moyenne', ascending=False)
+                
+                # Graphique en barres avec barres d'erreur
+                fig_teams = px.bar(
+                    team_stats.reset_index(),
+                    x=squad_col,
+                    y='Moyenne',
+                    error_y='Écart-type',
+                    title=f"Comparaison équipes - {team_metric}",
+                    text='Moyenne'
+                )
+                fig_teams.update_traces(texttemplate='%{text:.2f}', textposition='outside')
+                fig_teams.update_xaxes(tickangle=45)
+                fig_teams.update_layout(height=500)
+                st.plotly_chart(fig_teams, use_container_width=True)
+                
+                # Tableau des stats
+                st.markdown("##### 📊 Statistiques par équipe")
+                st.dataframe(team_stats, use_container_width=True)
+                
+                # Box plot pour voir la distribution
+                st.markdown("##### 📦 Distribution par équipe")
+                
+                fig_box = px.box(
+                    df[df[squad_col].isin(selected_teams)],
+                    x=squad_col,
+                    y=team_metric,
+                    title=f"Distribution de {team_metric} par équipe"
+                )
+                fig_box.update_xaxes(tickangle=45)
+                fig_box.update_layout(height=400)
+                st.plotly_chart(fig_box, use_container_width=True)
+    
+    elif comparison_mode == "🎯 Joueur vs Moyenne Poste":
+        st.markdown("#### 🎯 Joueur vs Moyenne du poste")
+        
+        # Sélection du joueur
+        selected_player = st.selectbox(
+            "Choisir un joueur:",
+            df[player_col].tolist(),
+            key="player_vs_position"
+        )
+        
+        if selected_player:
+            player_data = df[df[player_col] == selected_player].iloc[0]
+            
+            # Métriques à analyser
+            analysis_metrics = st.multiselect(
+                "Métriques à analyser:",
+                metrics,
+                default=metrics[:8],
+                key="player_vs_position_metrics"
+            )
+            
+            if analysis_metrics:
+                # Calculer les moyennes du poste
+                position_averages = df[analysis_metrics].mean()
+                
+                # Créer le graphique de comparaison
+                comparison_data = []
+                
+                for metric in analysis_metrics:
+                    player_val = player_data[metric]
+                    position_avg = position_averages[metric]
+                    
+                    comparison_data.append({
+                        'Métrique': metric,
+                        'Joueur': player_val,
+                        'Moyenne poste': position_avg,
+                        'Différence': player_val - position_avg,
+                        'Différence %': ((player_val - position_avg) / position_avg * 100) if position_avg != 0 else 0
+                    })
+                
+                comparison_df = pd.DataFrame(comparison_data)
+                
+                # Graphique en barres groupées
+                fig_comparison = go.Figure()
+                
+                fig_comparison.add_trace(go.Bar(
+                    name='Joueur',
+                    x=comparison_df['Métrique'],
+                    y=comparison_df['Joueur'],
+                    marker_color='#ff7f0e',
+                    text=comparison_df['Joueur'].round(2),
+                    textposition='outside'
+                ))
+                
+                fig_comparison.add_trace(go.Bar(
+                    name='Moyenne poste',
+                    x=comparison_df['Métrique'],
+                    y=comparison_df['Moyenne poste'],
+                    marker_color='#1f77b4',
+                    text=comparison_df['Moyenne poste'].round(2),
+                    textposition='outside'
+                ))
+                
+                fig_comparison.update_layout(
+                    barmode='group',
+                    title=f'Comparaison: {selected_player} vs Moyenne du poste',
+                    height=500
+                )
+                fig_comparison.update_xaxes(tickangle=45)
+                
+                st.plotly_chart(fig_comparison, use_container_width=True)
+                
+                # Tableau des différences
+                st.markdown("##### 📊 Analyse des écarts")
+                
+                # Colorier les différences
+                def highlight_differences(val):
+                    if val > 10:
+                        return 'background-color: #d4edda; color: #155724'  # Vert
+                    elif val < -10:
+                        return 'background-color: #f8d7da; color: #721c24'  # Rouge
+                    else:
+                        return 'background-color: #fff3cd; color: #856404'  # Jaune
+                
+                styled_comparison = comparison_df.round(3).style.applymap(
+                    highlight_differences, subset=['Différence %']
+                )
+                
+                st.dataframe(styled_comparison, use_container_width=True, hide_index=True)
+
+def show_kpi_trends(df, metrics, definitions, player_col, squad_col):
+    """Analyse des tendances et patterns dans les KPI."""
+    st.markdown("### 📈 Analyse des tendances")
+    
+    if not metrics:
+        st.warning("Aucune métrique KPI disponible")
+        return
+    
+    # === ANALYSE PAR ÂGE ===
+    if 'Age' in df.columns:
+        st.markdown("#### 📅 Tendances par âge")
+        
+        age_metric = st.selectbox(
+            "Métrique à analyser selon l'âge:",
+            metrics,
+            key="age_trend_metric"
+        )
+        
+        # Créer des groupes d'âge
+        df_age = df.copy()
+        df_age['Groupe_Age'] = pd.cut(df_age['Age'], 
+                                    bins=[15, 20, 23, 26, 30, 40], 
+                                    labels=['≤20 ans', '21-23 ans', '24-26 ans', '27-30 ans', '30+ ans'])
+        
+        # Analyse par groupe d'âge
+        age_analysis = df_age.groupby('Groupe_Age')[age_metric].agg(['mean', 'median', 'count']).round(3)
+        age_analysis.columns = ['Moyenne', 'Médiane', 'Effectif']
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            # Graphique en barres
+            fig_age_bar = px.bar(
+                age_analysis.reset_index(),
+                x='Groupe_Age',
+                y='Moyenne',
+                title=f"Moyenne de {age_metric} par groupe d'âge",
+                text='Moyenne'
+            )
+            fig_age_bar.update_traces(texttemplate='%{text:.2f}', textposition='outside')
+            fig_age_bar.update_layout(height=400)
+            st.plotly_chart(fig_age_bar, use_container_width=True)
+        
+        with col2:
+            # Scatter plot âge vs métrique
+            fig_age_scatter = px.scatter(
+                df,
+                x='Age',
+                y=age_metric,
+                color=squad_col if squad_col in df.columns else None,
+                title=f"{age_metric} vs Âge",
+                trendline="lowess"
+            )
+            fig_age_scatter.update_layout(height=400)
+            st.plotly_chart(fig_age_scatter, use_container_width=True)
+        
+        # Tableau par groupe d'âge
+        st.markdown("##### 📊 Statistiques par groupe d'âge")
+        st.dataframe(age_analysis, use_container_width=True)
+    
+    st.markdown("---")
+    
+    # === ANALYSE PAR TEMPS DE JEU ===
+    if 'Min' in df.columns:
+        st.markdown("#### ⏱️ Tendances par temps de jeu")
+        
+        minutes_metric = st.selectbox(
+            "Métrique à analyser selon le temps de jeu:",
+            metrics,
+            key="minutes_trend_metric"
+        )
+        
+        # Créer des groupes de temps de jeu
+        df_minutes = df.copy()
+        df_minutes['Groupe_Minutes'] = pd.cut(df_minutes['Min'], 
+                                            bins=[0, 500, 1000, 1500, 2500, 5000], 
+                                            labels=['<500 min', '500-1000', '1000-1500', '1500-2500', '2500+ min'])
+        
+        # Analyse par groupe de minutes
+        minutes_analysis = df_minutes.groupby('Groupe_Minutes')[minutes_metric].agg(['mean', 'median', 'count']).round(3)
+        minutes_analysis.columns = ['Moyenne', 'Médiane', 'Effectif']
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            # Box plot
+            fig_minutes_box = px.box(
+                df_minutes.dropna(subset=['Groupe_Minutes']),
+                x='Groupe_Minutes',
+                y=minutes_metric,
+                title=f"Distribution de {minutes_metric} par temps de jeu"
+            )
+            fig_minutes_box.update_layout(height=400)
+            st.plotly_chart(fig_minutes_box, use_container_width=True)
+        
+        with col2:
+            # Scatter avec taille proportionnelle aux minutes
+            fig_minutes_scatter = px.scatter(
+                df,
+                x='Min',
+                y=minutes_metric,
+                size='Min',
+                color=squad_col if squad_col in df.columns else None,
+                title=f"{minutes_metric} vs Minutes jouées",
+                hover_data=[player_col]
+            )
+            fig_minutes_scatter.update_layout(height=400)
+            st.plotly_chart(fig_minutes_scatter, use_container_width=True)
+        
+        st.markdown("##### 📊 Impact du temps de jeu")
+        st.dataframe(minutes_analysis, use_container_width=True)
+    
+    st.markdown("---")
+    
+    # === ANALYSE MULTI-DIMENSIONNELLE ===
+    st.markdown("#### 🎯 Analyse multi-dimensionnelle")
+    
+    if len(metrics) >= 3:
+        # Sélection de 3 métriques pour l'analyse 3D
+        multi_metrics = st.multiselect(
+            "Choisir 3 métriques pour l'analyse 3D:",
+            metrics,
+            default=metrics[:3],
+            max_selections=3,
+            key="multi_dim_metrics"
+        )
+        
+        if len(multi_metrics) == 3:
+            # Graphique 3D
+            fig_3d = px.scatter_3d(
+                df,
+                x=multi_metrics[0],
+                y=multi_metrics[1],
+                z=multi_metrics[2],
+                color=squad_col if squad_col in df.columns else None,
+                size='Min' if 'Min' in df.columns else None,
+                hover_data=[player_col],
+                title=f"Analyse 3D: {multi_metrics[0]} × {multi_metrics[1]} × {multi_metrics[2]}"
+            )
+            fig_3d.update_layout(height=600)
+            st.plotly_chart(fig_3d, use_container_width=True)
+            
+            # Analyse de clustering (optionnel)
+            if st.checkbox("Afficher l'analyse de clustering", key="show_clustering"):
+                from sklearn.cluster import KMeans
+                from sklearn.preprocessing import StandardScaler
+                
+                # Préparer les données pour le clustering
+                clustering_data = df[multi_metrics].fillna(df[multi_metrics].mean())
+                scaler = StandardScaler()
+                scaled_data = scaler.fit_transform(clustering_data)
+                
+                # K-means clustering
+                n_clusters = st.slider("Nombre de clusters:", 2, 8, 4, key="n_clusters")
+                kmeans = KMeans(n_clusters=n_clusters, random_state=42)
+                clusters = kmeans.fit_predict(scaled_data)
+                
+                # Ajouter les clusters au dataframe
+                df_clustered = df.copy()
+                df_clustered['Cluster'] = clusters
+                
+                # Graphique avec clusters
+                fig_cluster = px.scatter_3d(
+                    df_clustered,
+                    x=multi_metrics[0],
+                    y=multi_metrics[1],
+                    z=multi_metrics[2],
+                    color='Cluster',
+                    hover_data=[player_col],
+                    title=f"Clustering des joueurs ({n_clusters} groupes)"
+                )
+                fig_cluster.update_layout(height=600)
+                st.plotly_chart(fig_cluster, use_container_width=True)
+                
+                # Analyse des clusters
+                st.markdown("##### 📊 Profils des clusters")
+                cluster_analysis = df_clustered.groupby('Cluster')[multi_metrics].mean().round(3)
+                st.dataframe(cluster_analysis, use_container_width=True)
 
 # Application principale
 def main():
