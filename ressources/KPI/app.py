@@ -87,39 +87,6 @@ def format_metric_name(metric_name, natural_names_map=None):
         return metric_labels.get(metric_name, metric_name)
     return natural_names_map.get(metric_name, metric_name)
 
-def update_chart_labels(fig, x_metric=None, y_metric=None):
-    """Met à jour les labels d'axes d'un graphique avec les noms naturels."""
-    if x_metric:
-        fig.update_xaxes(title_text=format_metric_name(x_metric))
-    if y_metric:
-        fig.update_yaxes(title_text=format_metric_name(y_metric))
-    return fig
-
-def rename_dataframe_columns(df, columns_to_rename=None):
-    """Renomme les colonnes d'un dataframe en utilisant les noms naturels."""
-    if df is None or df.empty:
-        return df
-    
-    df_copy = df.copy()
-    
-    # Si columns_to_rename n'est pas spécifié, renommer toutes les colonnes de métriques
-    if columns_to_rename is None:
-        columns_to_rename = df_copy.columns.tolist()
-    
-    # Créer un dictionnaire de renommage
-    rename_dict = {}
-    for col in columns_to_rename:
-        if col in df_copy.columns:
-            natural_name = format_metric_name(col)
-            if natural_name != col:  # Seulement si le nom a changé
-                rename_dict[col] = natural_name
-    
-    # Appliquer le renommage
-    if rename_dict:
-        df_copy = df_copy.rename(columns=rename_dict)
-    
-    return df_copy
-
 # Fonctions graphiques
 def create_scatter_plot(data, x_col, y_col, color_col='Position', size_col=None, title="Scatter Plot"):
     """Crée un scatter plot interactif."""
@@ -1039,7 +1006,6 @@ def show_kpi_overview(df, metrics, definitions, player_col, squad_col):
                 nbins=25,
                 marginal="box"
             )
-            fig_hist = update_chart_labels(fig_hist, x_metric=selected_metric)
             fig_hist.update_layout(height=400)
             st.plotly_chart(fig_hist, use_container_width=True)
         
@@ -1055,7 +1021,6 @@ def show_kpi_overview(df, metrics, definitions, player_col, squad_col):
                     y=selected_metric,
                     title=f"{format_metric_name(selected_metric)} par équipe (Top 10)"
                 )
-                fig_box = update_chart_labels(fig_box, y_metric=selected_metric)
                 fig_box.update_xaxes(tickangle=45)
                 fig_box.update_layout(height=400)
                 st.plotly_chart(fig_box, use_container_width=True)
@@ -1159,10 +1124,9 @@ def show_kpi_detailed(df, metrics, definitions, player_col, squad_col):
                 y=y_metric,
                 color=squad_col if squad_col in df.columns else None,
                 hover_data=[player_col] if player_col in df.columns else None,
-                title=f"{format_metric_name(y_metric)} vs {format_metric_name(x_metric)} (r = {correlation:.3f})",
+                title=f"{y_metric} vs {x_metric} (r = {correlation:.3f})",
                 trendline="ols"
             )
-            fig_scatter = update_chart_labels(fig_scatter, x_metric=x_metric, y_metric=y_metric)
             fig_scatter.update_layout(height=600)
             st.plotly_chart(fig_scatter, use_container_width=True)
             
@@ -1198,11 +1162,10 @@ def show_kpi_detailed(df, metrics, definitions, player_col, squad_col):
                 fig_dist = px.histogram(
                     df,
                     x=metric,
-                    title=f"Distribution - {format_metric_name(metric)}",
+                    title=f"Distribution - {metric}",
                     nbins=20,
                     marginal="box"
                 )
-                fig_dist = update_chart_labels(fig_dist, x_metric=metric)
                 fig_dist.update_layout(height=400)
                 st.plotly_chart(fig_dist, use_container_width=True)
         
@@ -1211,9 +1174,6 @@ def show_kpi_detailed(df, metrics, definitions, player_col, squad_col):
         
         stats_df = df[selected_metrics].describe().round(3).T
         stats_df['CV'] = (stats_df['std'] / stats_df['mean']).round(3)  # Coefficient de variation
-        
-        # Renommer l'index avec les noms naturels
-        stats_df.index = [format_metric_name(m) for m in stats_df.index]
         
         st.dataframe(stats_df, use_container_width=True)
     
@@ -1238,10 +1198,9 @@ def show_kpi_detailed(df, metrics, definitions, player_col, squad_col):
             x=player_col,
             y=ranking_metric,
             color=squad_col if squad_col in df.columns else None,
-            title=f"Top {n_top} - {format_metric_name(ranking_metric)}",
+            title=f"Top {n_top} - {ranking_metric}",
             text=ranking_metric
         )
-        fig_ranking = update_chart_labels(fig_ranking, y_metric=ranking_metric)
         fig_ranking.update_traces(texttemplate='%{text:.2f}', textposition='outside')
         fig_ranking.update_xaxes(tickangle=45)
         fig_ranking.update_layout(height=500)

@@ -1,23 +1,23 @@
-KPI,Justification,Calcul,Colonnes
-NP_Gls_per90,Efficacité de but hors pénalty,(Gls - PK) / 90s,"Gls, PK, 90s"
-npxG_per90,Qualité d'occasions générées/reçues,npxG / 90s,"npxG, 90s"
-Shots_per90,Volume offensif,Sh/90,Sh/90
-Shot_OnTarget_pct,Précision de tir,SoT%,SoT%
-Conv_rate,Conversion tir→but,G/Sh,G/Sh
-xG_per_shot_np,Qualité moyenne des tirs,npxG/Sh,npxG/Sh
-Finishing_vs_xG_np_per90,Sur/sous-perf vs npxG,(Gls - PK - npxG)/90s,"Gls, PK, npxG, 90s"
-xGxA_per90,Création attendue totale,(xG + xA)/90s,"xG, xA, 90s"
-GA_per90,Contribution directe,(Gls + Ast)/90s,"Gls, Ast, 90s"
-KeyPasses_per90,Création d'occasions,KP_per_90 si dispo sinon KP/90s,"KP[, KP_per_90], 90s"
-PPA_per90,Dangerosité par la passe,PPA_per_90 si dispo sinon PPA/90s,"PPA[, PPA_per_90], 90s"
-PrgPass_per90,Progression par la passe,PrgP_per_90 si dispo sinon PrgP/90s,"PrgP[, PrgP_per_90], 90s"
-PrgCarries_per90,Progression balle au pied,PrgC_per_90 si dispo sinon PrgC/90s,"PrgC[, PrgC_per_90], 90s"
-Touches_Att3rd_per90,Présence zone offensive,Att 3rd_possession_per_90 si dispo sinon Att 3rd_possession/90s,"Att 3rd_possession[, Att 3rd_possession_per_90], 90s"
-Touches_Box_per90,Présence surface,Att Pen_per_90 si dispo sinon Att Pen/90s,"Att Pen[, Att Pen_per_90], 90s"
-Dribble_Success_pct,Efficacité 1v1,Succ%,Succ%
-Dribble_Att_per90,Volume d'éliminations,Att_possession_per_90 si dispo sinon Att_possession/90s,"Att_possession[, Att_possession_per_90], 90s"
-Fouls_Drawn_per90,Capacité à provoquer CPA,Fld_per_90 si dispo sinon Fld/90s,"Fld[, Fld_per_90], 90s"
-Recoveries_per90,Travail sans ballon,Recov_per_90 si dispo sinon Recov/90s,"Recov[, Recov_per_90], 90s"
-Aerial_Win_pct,Jeu aérien,Won%,Won%
-OnField_xGD_per90,Impact collectif (xG diff),xG+/-90,xG+/-90
-Availability_Min_pct,Disponibilité / importance,Min%,Min%
+KPI,Justification,Calcul,Colonnes,natural_name
+NP_Gls_per90,Efficacité de but hors pénalty,(Gls - PK) / 90s,"Gls, PK, 90s",buts hors penalty / 90
+npxG_per90,Qualité d'occasions générées/reçues,npxG / 90s,"npxG, 90s",buts attendus (npxG) / 90
+Shots_per90,Volume offensif,Sh/90,Sh/90,tirs / 90
+Shot_OnTarget_pct,Précision de tir,SoT%,SoT%,% de tirs cadrés
+Conv_rate,Conversion tir→but,G/Sh,G/Sh,taux de conversion
+xG_per_shot_np,Qualité moyenne des tirs,npxG/Sh,npxG/Sh,qualité moyenne des tirs (xG/tir)
+Finishing_vs_xG_np_per90,Sur/sous-perf vs npxG,(Gls - PK - npxG)/90s,"Gls, PK, npxG, 90s",efficacité vs xG attendu / 90
+xGxA_per90,Création attendue totale,(xG + xA)/90s,"xG, xA, 90s",contribution offensive totale (xG+xA) / 90
+GA_per90,Contribution directe,(Gls + Ast)/90s,"Gls, Ast, 90s",buts + passes décisives / 90
+KeyPasses_per90,Création d'occasions,KP_per_90 si dispo sinon KP/90s,"KP[, KP_per_90], 90s",passes clés / 90
+PPA_per90,Dangerosité par la passe,PPA_per_90 si dispo sinon PPA/90s,"PPA[, PPA_per_90], 90s",passes vers zone de penalty / 90
+PrgPass_per90,Progression par la passe,PrgP_per_90 si dispo sinon PrgP/90s,"PrgP[, PrgP_per_90], 90s",passes progressives / 90
+PrgCarries_per90,Progression balle au pied,PrgC_per_90 si dispo sinon PrgC/90s,"PrgC[, PrgC_per_90], 90s",courses progressives / 90
+Touches_Att3rd_per90,Présence zone offensive,Att 3rd_possession_per_90 si dispo sinon Att 3rd_possession/90s,"Att 3rd_possession[, Att 3rd_possession_per_90], 90s",touches dans le tiers offensif / 90
+Touches_Box_per90,Présence surface,Att Pen_per_90 si dispo sinon Att Pen/90s,"Att Pen[, Att Pen_per_90], 90s",touches dans la surface / 90
+Dribble_Success_pct,Efficacité 1v1,Succ%,Succ%,% de dribbles réussis
+Dribble_Att_per90,Volume d'éliminations,Att_possession_per_90 si dispo sinon Att_possession/90s,"Att_possession[, Att_possession_per_90], 90s",tentatives de dribbles / 90
+Fouls_Drawn_per90,Capacité à provoquer CPA,Fld_per_90 si dispo sinon Fld/90s,"Fld[, Fld_per_90], 90s",fautes provoquées / 90
+Recoveries_per90,Travail sans ballon,Recov_per_90 si dispo sinon Recov/90s,"Recov[, Recov_per_90], 90s",récupérations / 90
+Aerial_Win_pct,Jeu aérien,Won%,Won%,% de duels aériens gagnés
+OnField_xGD_per90,Impact collectif (xG diff),xG+/-90,xG+/-90,différentiel xG sur le terrain / 90
+Availability_Min_pct,Disponibilité / importance,Min%,Min%,% de minutes jouées

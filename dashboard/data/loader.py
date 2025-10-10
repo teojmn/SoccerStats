@@ -4,6 +4,53 @@ import numpy as np
 import streamlit as st
 
 @st.cache_data
+def load_kpi_natural_names():
+    """Charge les noms naturels des KPI depuis les fichiers CSV."""
+    kpi_path = os.path.normpath(os.path.join(os.path.dirname(__file__), '..', '..', 'ressources', 'KPI'))
+    
+    natural_names = {}
+    
+    # Charger les KPI FW
+    fw_kpi_path = os.path.join(kpi_path, 'kpi_sum_FW.csv')
+    if os.path.exists(fw_kpi_path):
+        try:
+            df_fw = pd.read_csv(fw_kpi_path)
+            if 'KPI' in df_fw.columns and 'natural_name' in df_fw.columns:
+                for _, row in df_fw.iterrows():
+                    natural_names[row['KPI']] = row['natural_name']
+        except Exception as e:
+            st.warning(f"Impossible de charger les noms naturels FW: {e}")
+    
+    # Charger les KPI DF
+    df_kpi_path = os.path.join(kpi_path, 'KPI_sum_DF.csv')
+    if os.path.exists(df_kpi_path):
+        try:
+            df_df = pd.read_csv(df_kpi_path)
+            if 'KPI' in df_df.columns and 'natural_name' in df_df.columns:
+                for _, row in df_df.iterrows():
+                    natural_names[row['KPI']] = row['natural_name']
+        except Exception as e:
+            st.warning(f"Impossible de charger les noms naturels DF: {e}")
+    
+    return natural_names
+
+def get_natural_name(technical_name, natural_names_map=None):
+    """
+    Retourne le nom naturel d'un KPI technique.
+    
+    Args:
+        technical_name: Le nom technique du KPI
+        natural_names_map: Dictionnaire de mapping (optionnel, sera chargé si non fourni)
+    
+    Returns:
+        Le nom naturel ou le nom technique si non trouvé (fallback)
+    """
+    if natural_names_map is None:
+        natural_names_map = load_kpi_natural_names()
+    
+    return natural_names_map.get(technical_name, technical_name)
+
+@st.cache_data
 def load_and_prepare_data():
     """Charge et prépare toutes les données des 4 postes."""
     # Chemin vers ressources à partir de ce fichier
@@ -169,26 +216,34 @@ def get_position_metrics():
     }
 
 def get_metric_labels():
-    """Retourne les labels français pour les métriques."""
-    return {
-        'Gls_per_90': 'Buts/90',
-        'SoT_per_90': 'Tirs cadrés/90',
-        'xG_per_90': 'xG/90',
-        'Ast_per_90': 'Passes D/90',
-        'xAG_per_90': 'xAG/90',
-        'KP_per_90': 'Passes clés/90',
-        'PrgP_per_90': 'Passes prog./90',
-        'PrgC_per_90': 'Courses prog./90',
-        'PPA_per_90': 'Passes zone finale/90',
-        'Touches_per_90': 'Touches/90',
-        'TklW_per_90': 'Tacles réussis/90',
-        'Int_per_90': 'Interceptions/90',
-        'Recov_per_90': 'Récupérations/90',
-        'Clr_per_90': 'Dégagements/90',
-        'Won_per_90': 'Duels gagnés/90',
-        'Saves_per_90': 'Arrêts/90',
-        'GA_per_90': 'Buts encaissés/90',
-        'Save%_per_90': '% Arrêts',
-        'PSxG_per_90': 'PSxG/90',
-        'CS%_per_90': '% Clean sheets'
+    """Retourne les labels français pour les métriques en utilisant les noms naturels."""
+    natural_names = load_kpi_natural_names()
+    
+    # Labels de base (pour compatibilité avec les métriques existantes dans les données normalisées)
+    base_labels = {
+        'Gls_per_90': 'buts / 90',
+        'SoT_per_90': 'tirs cadrés / 90',
+        'xG_per_90': 'buts attendus (xG) / 90',
+        'Ast_per_90': 'passes décisives / 90',
+        'xAG_per_90': 'assists attendus (xA) / 90',
+        'KP_per_90': 'passes clés / 90',
+        'PrgP_per_90': 'passes progressives / 90',
+        'PrgC_per_90': 'courses progressives / 90',
+        'PPA_per_90': 'passes vers zone de penalty / 90',
+        'Touches_per_90': 'touches / 90',
+        'TklW_per_90': 'tacles / 90',
+        'Int_per_90': 'interceptions / 90',
+        'Recov_per_90': 'récupérations / 90',
+        'Clr_per_90': 'dégagements / 90',
+        'Won_per_90': 'duels gagnés / 90',
+        'Saves_per_90': 'arrêts / 90',
+        'GA_per_90': 'buts encaissés / 90',
+        'Save%_per_90': '% d\'arrêts',
+        'PSxG_per_90': 'PSxG / 90',
+        'CS%_per_90': '% clean sheets'
     }
+    
+    # Fusionner avec les noms naturels des KPI
+    base_labels.update(natural_names)
+    
+    return base_labels
