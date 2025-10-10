@@ -1,3 +1,5 @@
+# SoccerStats
+
 Pour commencer, créez un environnement virtuel Python 3 et activez-le :
 
 ```bash
