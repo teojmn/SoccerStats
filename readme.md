@@ -14,5 +14,9 @@ pip install -r requirements.txt
 Ensuite, lancez l'application avec Streamlit :
 
 ```bash
+cd dashboard
+```
+
+```bash
 streamlit run app.py
 ```
