@@ -3,7 +3,6 @@ import os
 from pathlib import Path
 
 def load_csv_files():
-    # Charge tous les fichiers CSV nécessaires
 
     scrape_data_dir = Path("ScrapeData")
     
@@ -35,7 +34,6 @@ def load_csv_files():
     return dataframes
 
 def identify_common_columns(dataframes):
-    # Identifie les colonnes communes entre tous les dataframes
 
     if not dataframes:
         return set()
@@ -50,9 +48,6 @@ def identify_common_columns(dataframes):
     return common_cols
 
 def remove_goalkeepers(df):
-    """
-    Supprime les gardiens de but du dataframe
-    """
     initial_count = len(df)
     df_filtered = df[df['Pos'] != 'GK'].copy()
     removed_count = initial_count - len(df_filtered)
@@ -64,10 +59,6 @@ def remove_goalkeepers(df):
     return df_filtered
 
 def assemble_data(dataframes):
-    """
-    Assemble tous les dataframes en utilisant Player, Born et Squad comme clés
-    Cela permet de gérer les transferts de joueurs (même joueur dans plusieurs équipes)
-    """
     if not dataframes:
         raise ValueError("Aucun dataframe à assembler")
     
@@ -129,7 +120,6 @@ def assemble_data(dataframes):
         
         print(f"  Après jointure: {assembled_df.shape}")
         
-        # Vérification: le nombre de lignes ne devrait pas changer avec un left join
         if assembled_df.shape[0] != len(main_keys):
 
             print(f"  ATTENTION: Le nombre de lignes a changé de façon inattendue!")
@@ -138,7 +128,6 @@ def assemble_data(dataframes):
     return assembled_df
 
 def save_assembled_data(assembled_df, output_filename="assembled_data.csv"):
-    # Sauvegarde le dataframe assemblé
     print(f"\nSauvegarde dans {output_filename}...")
     assembled_df.to_csv(output_filename, index=False)
     print(f"Fichier sauvegardé avec {assembled_df.shape[0]} lignes et {assembled_df.shape[1]} colonnes")
@@ -165,7 +154,6 @@ def main():
         
         assembled_df = assemble_data(dataframes)
         
-        # Supprimer les gardiens de but
         assembled_df = remove_goalkeepers(assembled_df)
         
         save_assembled_data(assembled_df)
